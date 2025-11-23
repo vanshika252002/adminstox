@@ -28,6 +28,10 @@ useEffect(()=>{
 console.log("values", values[0].values?.map(i=>i.id))
 },[values])
 
+  const handleRemoveNewValue = (indexToRemove) => {
+    setMultipleValues(multipleValues.filter((_, index) => index !== indexToRemove));
+  };
+
 
   return (
     <Modal
@@ -78,9 +82,13 @@ console.log("values", values[0].values?.map(i=>i.id))
       multipleValues.length>0 && <div>
          <p>Newly Added Values</p>
                 <div className="d-flex flex-wrap gap-2">
-            {multipleValues?.map((i) => (
-              <button className="btn btn-light border border-1 mt-2">
-                {i}
+            {multipleValues?.map((i, index) => (
+              <button 
+                key={index}
+                className="btn btn-light border border-1 mt-2" 
+                onClick={() => handleRemoveNewValue(index)}
+              >
+                {i} x
               </button>
             ))}
           </div>

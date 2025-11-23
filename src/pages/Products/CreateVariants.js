@@ -3,9 +3,45 @@ import { useEffect, useState } from "react";
 import { useGetAttributes } from "./useGetAttributes";
 import { useGetAttributesValues } from "../../utils/useGetAttributesValues";
 import { toast } from "react-toastify";
-import { generate_variants } from "../../reduxData/user/userAction";
+import { generate_variants, upload_multiple_image } from "../../reduxData/user/userAction";
 import { useNavigate, useParams } from "react-router-dom";
 import { handleImageUpload } from "./utils";
+
+// Helper to handle image upload for variants (with or without color)
+const handleVariantImageUpload = async (e, identifier, hasColor, setColorImages, setVariantImages, colorImages, variantImages) => {
+  const files = e.target.files;
+  if (!files || files.length === 0) return;
+  
+  const formData = new FormData();
+  for (const file of files) {
+    formData.append("images", file);
+  }
+
+  try {
+    const res = await upload_multiple_image(
+      formData,
+      localStorage.getItem("token")
+    );
+    
+    console.log("response of the images api", res?.data?.data);
+    
+    if (hasColor) {
+      setColorImages((prev) => ({
+        ...prev,
+        [identifier]: res?.data?.data || []
+      }));
+    } else {
+      setVariantImages((prev) => ({
+        ...prev,
+        [identifier]: res?.data?.data || []
+      }));
+    }
+    
+  } catch (error) {
+    console.error("Upload error:", error);
+  }
+};
+
 const CreateVariants = () => {
 
   const [uploadImages, setUploadImages] = useState([]);
@@ -13,6 +49,7 @@ const CreateVariants = () => {
   const [tableAttrib, setTableAttrib] = useState([]);
   const [pairs, setPairs] = useState([]);
   const [colorImages, setColorImages] = useState([]);
+  const [variantImages, setVariantImages] = useState([]);
 
   const listAttributes = useGetAttributes();
 
@@ -122,44 +159,69 @@ const CreateVariants = () => {
     );
     console.log("All selected value IDs:", allValueIds);
 
-    const payload = pairs.map(pair => {
-      const allOtherIds = pair.values.flat().map(v => v.id);
-      const uniqueIds = [...new Set(allOtherIds)];
+    const payload = pairs.map((pair) => {
+      // Collect all unique attribute value IDs for this color/variant
+      let allAttributeIds = [];
       
-      return {
-        attribute_value_ids: [
-          pair.colorId,         
-          ...uniqueIds            
-        ],
-        images: colorImages[pair.colorId] || []
-      };
+      if (pair.colorId) {
+        // For color variants: collect all attribute IDs from all combinations
+        const valueCombos = pair.values && pair.values.length > 0 ? pair.values : [];
+        const allOtherIds = valueCombos.flatMap(valueCombo => 
+          valueCombo.map(v => v.id)
+        );
+        const uniqueOtherIds = [...new Set(allOtherIds)];
+        
+        // Ensure colorId is first and all IDs are unique
+        const otherIdsWithoutColor = uniqueOtherIds.filter(id => id !== pair.colorId);
+        allAttributeIds = [pair.colorId, ...otherIdsWithoutColor];
+        
+        return {
+          attribute_value_ids: allAttributeIds,
+          images: colorImages[pair.colorId] || []
+        };
+      } else {
+        // No color - collect all IDs from the single combination
+        const valueCombo = pair.values && pair.values.length > 0 ? pair.values[0] : [];
+        const allOtherIds = valueCombo.map(v => v.id);
+        allAttributeIds = [...new Set(allOtherIds)];
+        
+        return {
+          attribute_value_ids: allAttributeIds,
+          images: variantImages[pair.variantKey] || []
+        };
+      }
     });
     
     console.log("payload", payload)
-    console.log("colorImages", colorImages)
+    console.log("variantImages", variantImages)
     
     generateVariants(payload)
   };
 
-  // Generate pairs based on color
+  // Generate pairs - works with or without color
   const generatePairs = () => {
     if (selectedAttributes.length === 0) {
       setPairs([]);
       return;
     }
 
+    // Check if all attributes have values
+    const attributesWithValues = selectedAttributes.filter(
+      (attr) => attr.selectedValues.length > 0
+    );
+
+    if (attributesWithValues.length === 0) {
+      setPairs([]);
+      return;
+    }
+
     const colorAttribute = selectedAttributes.find(
-      (attr) => attr.name.toLowerCase() === "color" || attr.name.toLowerCase() === "colour"
+      (attr) => (attr.name.toLowerCase() === "color" || attr.name.toLowerCase() === "colour") && attr.selectedValues.length > 0
     );
 
     const otherAttributes = selectedAttributes.filter(
-      (attr) => attr.name.toLowerCase() !== "color" && attr.name.toLowerCase() !== "colour"
+      (attr) => attr.name.toLowerCase() !== "color" && attr.name.toLowerCase() !== "colour" && attr.selectedValues.length > 0
     );
-
-    if (!colorAttribute || colorAttribute.selectedValues.length === 0) {
-      // toast.warning("Please add Color attribute with values");
-      return;
-    }
 
     const cartesian = (arr) => {
       if (arr.length === 0) return [[]];
@@ -169,29 +231,65 @@ const CreateVariants = () => {
       );
     };
 
-    const otherValueArrays = otherAttributes.map((attr) =>
-      attr.selectedValues.map((val) => ({
-        id: val.id,
-        name: val.value,
-        attributeName: attr.name
-      }))
-    );
+    // If color exists, generate pairs based on color (grouped by color)
+    if (colorAttribute && colorAttribute.selectedValues.length > 0) {
+      const otherValueArrays = otherAttributes.map((attr) =>
+        attr.selectedValues.map((val) => ({
+          id: val.id,
+          name: val.value,
+          attributeName: attr.name
+        }))
+      );
 
-    const otherCombinations = otherValueArrays.length > 0
-      ? cartesian(otherValueArrays)
-      : [[]];
+      const otherCombinations = otherValueArrays.length > 0
+        ? cartesian(otherValueArrays)
+        : [[]];
 
-    const generatedPairs = colorAttribute.selectedValues.map((colorVal) => ({
-      color: colorVal.value,
-      colorId: colorVal.id,
-      values: otherCombinations.map((combination) => {
+      const generatedPairs = colorAttribute.selectedValues.map((colorVal) => {
+        const combinations = otherCombinations.map((combination) => {
+          const comboArray = Array.isArray(combination) ? combination : [combination];
+          return comboArray.filter(item => item !== undefined && item !== null);
+        }).filter(combo => combo.length > 0 || otherAttributes.length === 0);
+
+        return {
+          color: colorVal.value,
+          colorId: colorVal.id,
+          values: combinations,
+          variantKey: `color_${colorVal.id}`
+        };
+      });
+
+      setPairs(generatedPairs);
+      console.log("Generated Pairs (with color):", generatedPairs);
+    } else {
+      // No color attribute - generate all combinations from all attributes
+      const allValueArrays = attributesWithValues.map((attr) =>
+        attr.selectedValues.map((val) => ({
+          id: val.id,
+          name: val.value,
+          attributeName: attr.name
+        }))
+      );
+
+      const allCombinations = cartesian(allValueArrays);
+
+      const generatedPairs = allCombinations.map((combination, idx) => {
         const comboArray = Array.isArray(combination) ? combination : [combination];
-        return comboArray.filter(item => item !== undefined && item !== null);
-      }).filter(combo => combo.length > 0 || otherAttributes.length === 0)
-    }));
+        const filteredCombo = comboArray.filter(item => item !== undefined && item !== null);
+        const allIds = filteredCombo.map(v => v.id);
+        const variantKey = `variant_${allIds.join('_')}`;
 
-    setPairs(generatedPairs);
-    console.log("Generated Pairs:", generatedPairs);
+        return {
+          color: null,
+          colorId: null,
+          values: [filteredCombo],
+          variantKey: variantKey
+        };
+      });
+
+      setPairs(generatedPairs);
+      console.log("Generated Pairs (no color):", generatedPairs);
+    }
   };
 
   // const handleShowCombinations = () => {
@@ -320,7 +418,9 @@ useEffect(() => {
             <thead className="border-gray">
               <tr>
                 <th>Sr No.</th>
-                <th>Color</th>
+                {pairs.length > 0 && pairs[0]?.colorId && (
+                  <th>Color</th>
+                )}
                 <th>Images</th>
                 {tableAttrib
                   .filter(attr => attr.toLowerCase() !== "color" && attr.toLowerCase() !== "colour")
@@ -330,69 +430,122 @@ useEffect(() => {
               </tr>
             </thead>
             <tbody>
-              {pairs.map((pair, pairIdx) => (
-                <>
-                  {pair.values.length > 0 ? (
-                    pair.values.map((valueCombo, comboIdx) => (
-                      <tr key={`${pairIdx}-${comboIdx}`}>
-                        {comboIdx === 0 && (
-                          <td rowSpan={pair.values.length}>
-                            {pairIdx + 1}
-                          </td>
+              {pairs.map((pair, pairIdx) => {
+                const hasColor = pair.colorId !== null && pair.colorId !== undefined;
+                const valueCombos = pair.values && pair.values.length > 0 ? pair.values : [[]];
+                
+                return (
+                  <>
+                    {valueCombos.length > 0 ? (
+                      valueCombos.map((valueCombo, comboIdx) => (
+                        <tr key={`${pairIdx}-${comboIdx}`}>
+                          {comboIdx === 0 && (
+                            <td rowSpan={valueCombos.length}>
+                              {pairIdx + 1}
+                            </td>
+                          )}
+                          {hasColor && comboIdx === 0 && (
+                            <td rowSpan={valueCombos.length} className="fw-bold">
+                              {pair.color}
+                            </td>
+                          )}
+                          {comboIdx === 0 && (
+                            <td rowSpan={valueCombos.length}>
+                              {pair.colorId ? (
+                                <>
+                                  <input
+                                    type="file"
+                                    className="form-control form-control-sm"
+                                    accept="image/*"
+                                    multiple
+                                    onChange={(e) => handleVariantImageUpload(e, pair.colorId, true, setColorImages, setVariantImages, colorImages, variantImages)}
+                                  />
+                                  {colorImages[pair.colorId] && (
+                                    <small className="text-muted d-block mt-1">
+                                      {colorImages[pair.colorId].length} file(s) selected
+                                    </small>
+                                  )}
+                                </>
+                              ) : (
+                                <>
+                                  <input
+                                    type="file"
+                                    className="form-control form-control-sm"
+                                    accept="image/*"
+                                    multiple
+                                    onChange={(e) => handleVariantImageUpload(e, pair.variantKey, false, setColorImages, setVariantImages, colorImages, variantImages)}
+                                  />
+                                  {variantImages[pair.variantKey] && (
+                                    <small className="text-muted d-block mt-1">
+                                      {variantImages[pair.variantKey].length} file(s) selected
+                                    </small>
+                                  )}
+                                </>
+                              )}
+                            </td>
+                          )}
+                          {valueCombo && valueCombo.length > 0 ? (
+                            valueCombo.map((val, valIdx) => (
+                              <td key={valIdx}>{val.name}</td>
+                            ))
+                          ) : (
+                            tableAttrib
+                              .filter(attr => attr.toLowerCase() !== "color" && attr.toLowerCase() !== "colour")
+                              .map((attr, idx) => (
+                                <td key={idx}>-</td>
+                              ))
+                          )}
+                        </tr>
+                      ))
+                    ) : (
+                      <tr key={pairIdx}>
+                        <td>{pairIdx + 1}</td>
+                        {hasColor && (
+                          <td className="fw-bold">{pair.color}</td>
                         )}
-                        {comboIdx === 0 && (
-                          <td rowSpan={pair.values.length} className="fw-bold">
-                            {pair.color}
-                          </td>
-                        )}
-                        {comboIdx === 0 && (
-                          <td rowSpan={pair.values.length}>
-                            <input
-                              type="file"
-                              className="form-control form-control-sm"
-                              accept="image/*"
-                              multiple
-                              onChange={(e) => handleImageUpload(e, pair.colorId,setColorImages, colorImages)}
-                            />
-                            {colorImages[pair.colorId] && (
-                              <small className="text-muted d-block mt-1">
-                                {colorImages[pair.colorId].length} file(s) selected
-                              </small>
-                            )}
-                          </td>
-                        )}
-                        {valueCombo.map((val, valIdx) => (
-                          <td key={valIdx}>{val.name}</td>
-                        ))}
+                        <td>
+                          {pair.colorId ? (
+                            <>
+                              <input
+                                type="file"
+                                className="form-control form-control-sm"
+                                accept="image/*"
+                                multiple
+                                onChange={(e) => handleVariantImageUpload(e, pair.colorId, true, setColorImages, setVariantImages, colorImages, variantImages)}
+                              />
+                              {colorImages[pair.colorId] && (
+                                <small className="text-muted d-block mt-1">
+                                  {colorImages[pair.colorId].length} file(s) selected
+                                </small>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <input
+                                type="file"
+                                className="form-control form-control-sm"
+                                accept="image/*"
+                                multiple
+                                onChange={(e) => handleVariantImageUpload(e, pair.variantKey, false, setColorImages, setVariantImages, colorImages, variantImages)}
+                              />
+                              {variantImages[pair.variantKey] && (
+                                <small className="text-muted d-block mt-1">
+                                  {variantImages[pair.variantKey].length} file(s) selected
+                                </small>
+                              )}
+                            </>
+                          )}
+                        </td>
+                        {tableAttrib
+                          .filter(attr => attr.toLowerCase() !== "color" && attr.toLowerCase() !== "colour")
+                          .map((attr, idx) => (
+                            <td key={idx}>-</td>
+                          ))}
                       </tr>
-                    ))
-                  ) : (
-                    <tr key={pairIdx}>
-                      <td>{pairIdx + 1}</td>
-                      <td className="fw-bold">{pair.color}</td>
-                      <td>
-                        <input
-                          type="file"
-                          className="form-control form-control-sm"
-                          accept="image/*"
-                          multiple
-                          onChange={(e) => handleImageUpload(e, pair.colorId)}
-                        />
-                        {colorImages[pair.colorId] && (
-                          <small className="text-muted d-block mt-1">
-                            {colorImages[pair.colorId].length} file(s) selected
-                          </small>
-                        )}
-                      </td>
-                      {tableAttrib
-                        .filter(attr => attr.toLowerCase() !== "color" && attr.toLowerCase() !== "colour")
-                        .map((attr, idx) => (
-                          <td key={idx}>-</td>
-                        ))}
-                    </tr>
-                  )}
-                </>
-              ))}
+                    )}
+                  </>
+                );
+              })}
             </tbody>
           </table>
         </div>
