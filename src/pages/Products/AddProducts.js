@@ -9,7 +9,7 @@ import {
   edit_product,
   get_product_Detail,
   get_category,
-  get_brand_name
+  get_brand_name,
 } from "../../reduxData/user/userAction";
 import { useSelector } from "react-redux";
 import { FORMAT_SECONDS_NO_LEADING_ZEROS } from "@mui/x-date-pickers/internals/hooks/useField/useField.utils";
@@ -18,8 +18,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useDispatch } from "react-redux";
 
 const AddProducts = ({ type }) => {
- 
-  const token = useSelector(state=>state.auth.accessToken) 
+  const token = useSelector((state) => state.auth.accessToken);
   const navigate = useNavigate();
   const [uploading, setUploading] = useState(false);
   const categoriesId = useSelector((state) => state.user.categoriesList);
@@ -31,11 +30,11 @@ const AddProducts = ({ type }) => {
   const formik = useFormik({
     initialValues: initialValues(type, editData),
     validationSchema: schema,
-    enableReinitialize:true,
+    enableReinitialize: true,
     onSubmit: async (values, { resetForm }) => {
       console.log("values of formic", values);
       if (type == "edit") {
-        const res = await edit_product(token,values,  id, navigate);
+        const res = await edit_product(token, values, id, navigate);
       } else {
         const res = await add_item(token, values);
         if (res) {
@@ -75,36 +74,38 @@ const AddProducts = ({ type }) => {
   useEffect(() => {
     if (type == "edit") {
       const fetchData = async () => {
-        const res = await get_product_Detail(token, id);
-        if (res) {
-          console.log("data of edited product ", res?.data);
-          setEditData(res?.data);
+        try {
+          const res = await get_product_Detail(token, id);
+          if (res) {
+            console.log("data of edited product ", res?.data);
+            setEditData(res?.data);
+          }
+        } catch (error) {
+          // toast.error("Failed")
         }
       };
       fetchData();
     }
   }, [type]);
 
-  useEffect(()=>{
-    const fetchCategories = async()=>{
-      await get_category(dispatch, token )
-    }
-    fetchCategories();
-  },[])
-
-   const getBrands = async () => {
-      try {
-        const res = await get_brand_name(token);
-        if (res?.data) {
-          setBrand(res?.data);
-        }
-      } catch (error) {}
+  useEffect(() => {
+    const fetchCategories = async () => {
+      await get_category(dispatch, token);
     };
-useEffect(()=>{
-getBrands()
-},[])
+    fetchCategories();
+  }, []);
 
- 
+  const getBrands = async () => {
+    try {
+      const res = await get_brand_name(token);
+      if (res?.data) {
+        setBrand(res?.data);
+      }
+    } catch (error) {}
+  };
+  useEffect(() => {
+    getBrands();
+  }, []);
 
   return (
     <form className="container profile-deatils" onSubmit={formik.handleSubmit}>
@@ -161,7 +162,7 @@ getBrands()
         {/* Brand Name */}
         <div className="mb-3 col-md-6">
           <label htmlFor="brand_id">Brand Name</label>
-             <select
+          <select
             name="brand_id"
             id="brand_id"
             value={formik.values.brand_id}

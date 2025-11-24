@@ -61,6 +61,7 @@ import AddVariants from "./pages/Products/AddVariants";
 import AddSize from "./pages/Products/AddSize";
 import Brands from "./pages/Brands/Brands";
 import CreateVariants from "./pages/Products/CreateVariants";
+import VariantsList from "./pages/Products/VariantsList";
 
 function App({ user, isLoading, resetToken }) {
   const AuthRoutes = () =>
@@ -91,8 +92,10 @@ function App({ user, isLoading, resetToken }) {
     {path:"/edit-product/:id", element:<AddProducts type="edit"/>},
     {path:"/attributes", element:<Attributes/>},
     {path:"/add-size", element:<AddSize/>},
-    {path:"/brands", element:<Brands/>}
-    
+    {path:"/brands", element:<Brands/>},
+    {path:"/variants/:id",element:<VariantsList/>},
+
+
    , { path: "/payments", element: <Payments /> },
 
       { path: "/logs", element: <AuditLogs /> },

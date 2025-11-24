@@ -55,7 +55,7 @@ console.log("values", values[0].values?.map(i=>i.id))
           ></button>
         </div>
         <div className="mt-3">
-          <div className="d-flex justify-content-between flex-column gap-2">
+          <div className="d-flex justify-content-between flex-column gap-2 values-wrapper">
             <input
               className=" form-control"
               value={currentValue}
@@ -66,12 +66,12 @@ console.log("values", values[0].values?.map(i=>i.id))
          {values.length>0 && values[0]?.values?.length>0 &&  <div>
               <p>Already Added Values</p>
              
-           <div className="d-flex gap-2">
+           <div className="values-wrapper">
                {values[0]?.values?.map(item=>(
-               <div >
-                
-                 <button className="btn btn-light border border-1 mt-2" onClick={()=>{handleDeleteAttribute(item?.id);setCall(true)}}>
-                 {item?.value} x
+               <div className="btn btn-light border border-1 mt-2 delete-added-items">
+                {item?.value}
+                 <button className="delete-added-items-btn " onClick={()=>{handleDeleteAttribute(item?.id);setCall(true)}}>
+                  x
                 </button>
                 </div>
               ))}
@@ -81,15 +81,18 @@ console.log("values", values[0].values?.map(i=>i.id))
     {
       multipleValues.length>0 && <div>
          <p>Newly Added Values</p>
-                <div className="d-flex flex-wrap gap-2">
+                <div className="values-wrapper">
             {multipleValues?.map((i, index) => (
+               <div className="btn btn-light border border-1 mt-2 delete-added-items">
+                {i}   
               <button 
                 key={index}
-                className="btn btn-light border border-1 mt-2" 
+               className="delete-added-items-btn "
                 onClick={() => handleRemoveNewValue(index)}
               >
-                {i} x
+               x
               </button>
+              </div>
             ))}
           </div>
         </div>

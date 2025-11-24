@@ -580,19 +580,21 @@ export const get_product_Detail = async (token, id) => {
       },
     };
 
-    const urlPath = `${REACT_APP_BASE_URL}item/master-product-details/${id}`;
-    const res = await apiClient.get(urlPath, headers);
+    const urlPath = `${REACT_APP_BASE_URL}item/master-product-details?product_id=${id}`;
+    const res = await axios.get(urlPath, headers);
     if (res?.data) {
       return res?.data;
     }
-  } catch (error) {}
+  } catch (error) {
+    toast.error(error?.response?.message || error?.response?.data?.message||"Failed")
+  }
 };
 
 export const edit_item_list = async (user, navigate, token) => {
   try {
     const urlPath = `item/add`;
 
-    const res = await apiClient.post(urlPath, user);
+    const res = await axios.post(urlPath, user);
 
     if (res?.data?.status) {
       navigate("/item-listing");
@@ -1940,7 +1942,7 @@ export const delete_attribute_values = async (token, id) => {
 
 
 
-export const generate_variants = async(token ,ids)=>
+export const generate_variants = async(token ,ids )=>
 {
   try{
   
@@ -1962,4 +1964,69 @@ export const generate_variants = async(token ,ids)=>
  toast.error(error?.response?.message || error?.response?.data?.error || "Failed to generate Variants")
   }
 }
+
 // ATTRIBUTES APIS END
+
+
+
+// VARIANTS START
+
+export const get_variants = async(token,id)=>{
+  
+  try{
+     const headers  = {
+      headers:{
+        "x-access-token": token,
+         "Content-Type": "application/json",
+      }
+     }
+     console.log("hedaers token", token)
+     const urlPath = `${REACT_APP_BASE_URL}item/get-variants?product_id=${id}`;
+     const res= await axios.get(urlPath,headers);
+     if(res?.data)
+     {
+      return res?.data ;
+     }
+  }catch(error)
+  {
+  }
+}
+
+export const delete_variant = async(token,id)=>{
+  try{
+    const headers = {
+      headers:{
+        "x-access-token":token
+      }
+    }
+    const urlPath =`${REACT_APP_BASE_URL}item/delete-variant/${id}`;
+    const res = await axios.delete(urlPath,headers);
+    if(res?.data)
+    {
+      show_success(res?.data?.message || "Deleted Successfully");
+      return true;
+    }
+  }catch(error)
+  {
+    toast.error(error?.response?.data?.error || error?.response?.message || "Failed")
+  }
+}
+
+
+
+export const edit_variants = async(token,id)=>{
+
+  try{
+const headers = {
+headers:{
+  "x-access-token":token
+}
+};
+
+const urlPath= `${REACT_APP_BASE_URL}item/edit-variant/${id}`;
+const res = await axios.put(urlPath,body,token);
+  }catch(error){
+
+  }
+}
+// VARIANTS END

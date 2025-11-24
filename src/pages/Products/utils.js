@@ -1,6 +1,6 @@
 import { setSeconds } from "date-fns";
 import { useEffect, useState } from "react";
-import { upload_multiple_image } from "../../reduxData/user/userAction";
+import { upload_multiple_image , get_variants, delete_variant} from "../../reduxData/user/userAction";
 import * as Yup from "yup";
 
 export const initialValues = (type, data) => {
@@ -23,7 +23,8 @@ export const schema = Yup.object({
   category_id: Yup.number().required("Category is required"),
   original_retail_price: Yup.number()
     .positive("Price must be positive")
-    .required("Price is required"),
+    // .required("Price is required")
+    ,
   images: Yup.array()
     .of(Yup.string())
     .min(1, "Atleast one is required")
@@ -76,3 +77,82 @@ export const handleImageUpload = async (
     console.error("Upload error:", error);
   }
 };
+
+
+export const handleVariantImageUpload = async (e, identifier, hasColor, setColorImages, setVariantImages, colorImages, variantImages) => {
+  const files = e.target.files;
+  if (!files || files.length === 0) return;
+  
+  const formData = new FormData();
+  for (const file of files) {
+    formData.append("images", file);
+  }
+
+  try {
+    const res = await upload_multiple_image(
+      formData,
+      localStorage.getItem("token")
+    );
+    
+    console.log("response of the images api", res?.data?.data);
+    
+    if (hasColor) {
+      setColorImages((prev) => ({
+        ...prev,
+        [identifier]: res?.data?.data || []
+      }));
+    } else {
+      setVariantImages((prev) => ({
+        ...prev,
+        [identifier]: res?.data?.data || []
+      }));
+    }
+    
+  } catch (error) {
+    console.error("Upload error:", error);
+  }
+};
+
+
+export const useVariantsList = (token, id) => {
+  const [list, setList] = useState([]);
+
+  const fetchData = async () => {
+    try {
+      const res = await get_variants(token, id);
+      if (res) {
+        setList(res?.data || []);
+      }
+    } catch (error) {
+      console.error("Error fetching variants:", error);
+    }
+  };
+
+  const handleDeleteVariant = async (variant_id) => {
+    try {
+      const res = await delete_variant(token, variant_id);
+      if (res) {
+        fetchData();
+      }
+    } catch (error) {
+      console.error("Error deleting variant:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  return { list, handleDeleteVariant, fetchData };
+};
+
+
+ export const handleDate = (i) => {
+    const date = new Date(i);
+    const formatDate = date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+    return formatDate;
+  };
