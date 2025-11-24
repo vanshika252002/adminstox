@@ -2014,19 +2014,25 @@ export const delete_variant = async(token,id)=>{
 
 
 
-export const edit_variants = async(token,id)=>{
-
+export const edit_variants = async(token, variantId, body)=>{
   try{
-const headers = {
-headers:{
-  "x-access-token":token
-}
-};
-
-const urlPath= `${REACT_APP_BASE_URL}item/edit-variant/${id}`;
-const res = await axios.put(urlPath,body,token);
+    const headers = {
+      headers:{
+        "x-access-token": token,
+        "Content-Type": "application/json",
+      }
+    };
+    
+    const urlPath = `${REACT_APP_BASE_URL}item/edit-variant/${variantId}`;
+    const res = await axios.put(urlPath, body, headers);
+    
+    if(res?.data) {
+      show_success(res?.data?.message || "Variant updated successfully");
+      return true;
+    }
   }catch(error){
-
+    toast.error(error?.response?.data?.error || error?.response?.message || "Failed to update variant");
+    return false;
   }
 }
 // VARIANTS END

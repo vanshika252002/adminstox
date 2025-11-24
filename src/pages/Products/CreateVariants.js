@@ -72,6 +72,17 @@ const CreateVariants = () => {
     handleDeleteWithConfirmation,
     handleDeletePending,
     isColorAttribute,
+    // Edit handlers
+    editingVariant,
+    editImages,
+    editedAttributes,
+    editAttributeValues,
+    handleEditVariant,
+    handleCancelEdit,
+    handleEditImageUpload,
+    handleRemoveEditImage,
+    handleChangeEditAttributeValue,
+    handleSubmitEdit,
   } = useCreateVariants();
 
   // Scroll to variant creation section
@@ -89,7 +100,7 @@ const CreateVariants = () => {
             + Generate Combinations
           </button>
           <button className="btn btn-success" onClick={scrollToCreation}>
-            + Add Single Variant
+            + Add  Variant
           </button>
         </div>
       </div>
@@ -202,27 +213,36 @@ const CreateVariants = () => {
                         </td>
                         <td>{handleDate(variant?.created_at)}</td>
                         <td>
-                          <i
-                            className="far fa-edit edit me-2"
-                            style={{ cursor: "pointer" }}
-                            onClick={() => {
-                              toast.info("Edit functionality to be implemented");
-                            }}
-                          ></i>
                           {variant?.status === "pending" ? (
-                            <i
-                              onClick={() => handleDeletePending(variant?.temp_id)}
-                              className="bi bi-trash3 text-danger"
-                              style={{ cursor: "pointer" }}
-                            ></i>
+                            <>
+                              <i
+                                className="far fa-edit edit me-2 text-muted"
+                                style={{ cursor: "not-allowed", opacity: 0.5 }}
+                                title="Actions disabled for pending variants"
+                              ></i>
+                              <i
+                                className="bi bi-trash3 text-muted"
+                                style={{ cursor: "not-allowed", opacity: 0.5 }}
+                                title="Actions disabled for pending variants"
+                              ></i>
+                            </>
                           ) : (
-                            <i
-                              onClick={() =>
-                                handleDeleteWithConfirmation(variant?.variant_id)
-                              }
-                              className="bi bi-trash3 text-danger"
-                              style={{ cursor: "pointer" }}
-                            ></i>
+                            <>
+                              <i
+                                className="far fa-edit edit me-2"
+                                style={{ cursor: "pointer" }}
+                                onClick={() => handleEditVariant(variant)}
+                                title="Edit variant"
+                              ></i>
+                              <i
+                                onClick={() =>
+                                  handleDeleteWithConfirmation(variant?.variant_id)
+                                }
+                                className="bi bi-trash3 text-danger"
+                                style={{ cursor: "pointer" }}
+                                title="Delete variant"
+                              ></i>
+                            </>
                           )}
                         </td>
                       </tr>
@@ -460,6 +480,126 @@ const CreateVariants = () => {
           </button>
         )}
       </div>
+
+      {/* Edit Variant Modal */}
+      {editingVariant && (
+        <div
+          className="modal fade show"
+          style={{ display: "block", backgroundColor: "rgba(0,0,0,0.5)" }}
+          tabIndex="-1"
+        >
+          <div className="modal-dialog modal-lg">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Edit Variant</h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={handleCancelEdit}
+                ></button>
+              </div>
+              <div className="modal-body">
+                {/* Editable Variant Attributes */}
+                <div className="mb-4">
+                  <h6>Edit Variant Attributes:</h6>
+                  {editedAttributes.map((attr, idx) => (
+                    <div key={idx} className="mb-3">
+                      <label className="form-label fw-bold text-capitalize">
+                        {attr.attribute_name}
+                      </label>
+                      <select
+                        className="form-select"
+                        value={attr.value_id || ""}
+                        onChange={(e) => {
+                          const selectedOption = e.target.selectedOptions[0];
+                          const valueId = parseInt(e.target.value);
+                          const valueText = selectedOption.text;
+                          if (valueId) {
+                            handleChangeEditAttributeValue(attr.attribute_id, valueId, valueText);
+                          }
+                        }}
+                      >
+                        <option value="">Select {attr.attribute_name}...</option>
+                        {Array.isArray(editAttributeValues[attr.attribute_id]) &&
+                          editAttributeValues[attr.attribute_id].length > 0 ? (
+                          editAttributeValues[attr.attribute_id].map((val) => (
+                            <option key={val.id} value={val.id}>
+                              {val.value}
+                            </option>
+                          ))
+                        ) : (
+                          <option disabled>Loading values...</option>
+                        )}
+                      </select>
+                      {!attr.value_id && (
+                        <small className="text-danger">
+                          Please select a value for {attr.attribute_name}
+                        </small>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Images Section */}
+                <div className="mb-3">
+                  <label className="form-label">Variant Images</label>
+                  <input
+                    type="file"
+                    className="form-control mb-2"
+                    accept="image/*"
+                    multiple
+                    onChange={handleEditImageUpload}
+                  />
+                  
+                  {/* Display current images */}
+                  {editImages.length > 0 && (
+                    <div className="row g-2 mt-2">
+                      {editImages.map((image, idx) => (
+                        <div key={idx} className="col-md-3 position-relative">
+                          <img
+                            src={`${REACT_APP_IMAGE_URL}${image}`}
+                            alt={`Variant ${idx + 1}`}
+                            className="img-thumbnail"
+                            style={{ width: "100%", height: "150px", objectFit: "cover" }}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-danger position-absolute top-0 end-0 m-1"
+                            onClick={() => handleRemoveEditImage(idx)}
+                            style={{ zIndex: 10 }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {editImages.length === 0 && (
+                    <p className="text-muted">No images selected</p>
+                  )}
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={handleCancelEdit}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleSubmitEdit}
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

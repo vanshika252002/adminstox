@@ -2,10 +2,11 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { useSelector } from "react-redux";
 import { useParams } from "react-router-dom";
 import { toast } from "react-toastify";
-import { generate_variants } from "../../reduxData/user/userAction";
+import { generate_variants, edit_variants } from "../../reduxData/user/userAction";
 import { useGetAttributes } from "./useGetAttributes";
 import { useGetAttributesValues } from "../../utils/useGetAttributesValues";
 import { useVariantsList, handleVariantImageUpload } from "./utils";
+import { get_attributes_values } from "../../reduxData/user/userAction";
 
 export const STATUS_TABS = {
   ALL: "All",
@@ -27,6 +28,10 @@ export const useCreateVariants = () => {
   const [selectedAttributes, setSelectedAttributes] = useState([]);
   const [attributesValues, setAttributesValues] = useState([]);
   const [pendingVariants, setPendingVariants] = useState([]);
+  const [editingVariant, setEditingVariant] = useState(null);
+  const [editImages, setEditImages] = useState([]);
+  const [editedAttributes, setEditedAttributes] = useState([]); // Edited attribute values
+  const [editAttributeValues, setEditAttributeValues] = useState({}); // Values for each attribute
 
   // Hooks
   const listAttributes = useGetAttributes();
@@ -420,6 +425,225 @@ export const useCreateVariants = () => {
     setPendingVariants((prev) => prev.filter((v) => v.temp_id !== tempId));
   }, []);
 
+  // Handle edit variant - open edit mode
+  const handleEditVariant = useCallback(async (variant) => {
+    setEditingVariant(variant);
+    // Set initial images for editing
+    setEditImages(variant?.images || []);
+    
+    // Initialize edited attributes with current values
+    const initialAttributes = variant?.attribute?.map((attr) => ({
+      attribute_id: attr.attribute_id,
+      attribute_name: attr.attribute_name,
+      value: attr.value,
+      value_id: attr.value_id || attr.attribute_value_id || null,
+    })) || [];
+    
+    setEditedAttributes(initialAttributes);
+    
+    // Initialize empty values map first
+    setEditAttributeValues({});
+    
+    // Fetch attribute values for each attribute
+    const valuesMap = {};
+    
+    // Fetch values for each attribute
+    for (const attr of initialAttributes) {
+      try {
+        // Try to get from existing attributesValues first
+        const attrValues = attributesValues.find((av) => av.id === attr.attribute_id);
+        if (attrValues && attrValues.values && Array.isArray(attrValues.values)) {
+          valuesMap[attr.attribute_id] = attrValues.values;
+        } else {
+          // Fetch from API if not in cache
+          const res = await get_attributes_values(token, attr.attribute_id);
+          if (res?.data) {
+            // API response structure: res.data = [{ attribute_id: X, values: [{ id, value }, ...] }]
+            // Or res.data = { data: [{ attribute_id: X, values: [...] }] }
+            let valuesArray = [];
+            
+            // Handle different response structures
+            if (Array.isArray(res.data) && res.data.length > 0) {
+              // Structure: [{ attribute_id: X, values: [...] }]
+              valuesArray = res.data[0]?.values || [];
+            } else if (res.data.data && Array.isArray(res.data.data) && res.data.data.length > 0) {
+              // Structure: { data: [{ attribute_id: X, values: [...] }] }
+              valuesArray = res.data.data[0]?.values || [];
+            } else if (res.data.values && Array.isArray(res.data.values)) {
+              // Structure: { values: [...] }
+              valuesArray = res.data.values;
+            } else if (Array.isArray(res.data)) {
+              // Direct array
+              valuesArray = res.data;
+            }
+            
+            // Ensure we have an array of objects with id and value
+            if (Array.isArray(valuesArray) && valuesArray.length > 0) {
+              // Check if values are in the correct format
+              if (valuesArray[0]?.id && valuesArray[0]?.value) {
+                valuesMap[attr.attribute_id] = valuesArray;
+              } else {
+                valuesMap[attr.attribute_id] = [];
+              }
+            } else {
+              valuesMap[attr.attribute_id] = [];
+            }
+          } else {
+            valuesMap[attr.attribute_id] = [];
+          }
+        }
+      } catch (error) {
+        console.error(`Error fetching values for attribute ${attr.attribute_id}:`, error);
+        valuesMap[attr.attribute_id] = [];
+      }
+      
+      // Ensure it's always an array
+      if (!Array.isArray(valuesMap[attr.attribute_id])) {
+        valuesMap[attr.attribute_id] = [];
+      }
+    }
+    
+    // Set all values at once after fetching
+    setEditAttributeValues(valuesMap);
+  }, [attributesValues, token]);
+
+  // Handle cancel edit
+  const handleCancelEdit = useCallback(() => {
+    setEditingVariant(null);
+    setEditImages([]);
+    setEditedAttributes([]);
+    setEditAttributeValues({});
+  }, []);
+
+  // Handle change attribute value in edit
+  const handleChangeEditAttributeValue = useCallback((attributeId, valueId, valueText) => {
+    setEditedAttributes((prev) =>
+      prev.map((attr) =>
+        attr.attribute_id === attributeId
+          ? {
+              ...attr,
+              value_id: valueId,
+              value: valueText,
+            }
+          : attr
+      )
+    );
+  }, []);
+
+  // Handle edit image upload
+  const handleEditImageUpload = useCallback(async (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    try {
+      const formData = new FormData();
+      for (const file of files) {
+        formData.append("images", file);
+      }
+
+      const { upload_multiple_image } = await import("../../reduxData/user/userAction");
+      const res = await upload_multiple_image(formData, localStorage.getItem("token"));
+      
+      if (res?.data?.data) {
+        setEditImages((prev) => [...prev, ...res.data.data]);
+      }
+    } catch (error) {
+      console.error("Error uploading images:", error);
+      toast.error("Failed to upload images");
+    }
+  }, []);
+
+  // Handle remove edit image
+  const handleRemoveEditImage = useCallback((imageIndex) => {
+    setEditImages((prev) => prev.filter((_, idx) => idx !== imageIndex));
+  }, []);
+
+  // Check if edited variant would be duplicate (excluding itself)
+  const isEditedVariantDuplicate = useCallback((editedAttributes, submittedList, currentVariantId) => {
+    if (!submittedList || submittedList.length === 0) return false;
+    if (!editedAttributes || editedAttributes.length === 0) return false;
+
+    // Normalize attribute values for comparison (case-insensitive, trimmed)
+    const normalizeValue = (value) => String(value || "").toLowerCase().trim();
+
+    // Build a signature for the edited attributes: attribute_id:value pairs sorted
+    const editingSignature = editedAttributes
+      .map((attr) => `${attr.attribute_id}:${normalizeValue(attr.value)}`)
+      .sort()
+      .join("|");
+
+    // Check against all submitted variants except the one being edited
+    return submittedList.some((submittedVariant) => {
+      // Skip the variant being edited
+      if (submittedVariant.variant_id === currentVariantId) {
+        return false;
+      }
+
+      if (!submittedVariant?.attribute || submittedVariant.attribute.length === 0) {
+        return false;
+      }
+
+      // Build signature for submitted variant
+      const submittedSignature = submittedVariant.attribute
+        .map((attr) => `${attr.attribute_id}:${normalizeValue(attr.value)}`)
+        .sort()
+        .join("|");
+
+      // Compare signatures
+      return editingSignature === submittedSignature;
+    });
+  }, []);
+
+  // Handle submit edit
+  const handleSubmitEdit = useCallback(async () => {
+    if (!editingVariant) return;
+
+    // Check for duplicates before submitting using edited attributes
+    const submittedList = list || [];
+    if (isEditedVariantDuplicate(editedAttributes, submittedList, editingVariant.variant_id)) {
+      const duplicateDetails = editedAttributes
+        ?.map((a) => `${a.attribute_name}: ${a.value}`)
+        .join(", ");
+
+      toast.error(
+        `This variant already exists in the submitted list. Duplicate: ${duplicateDetails}. Please change the attributes.`
+      );
+      return;
+    }
+
+    // Extract attribute_value_ids from edited attributes
+    const attributeValueIds = editedAttributes
+      .map((attr) => attr.value_id)
+      .filter(Boolean);
+
+    if (attributeValueIds.length === 0) {
+      toast.error("Please select values for all attributes.");
+      return;
+    }
+
+    if (attributeValueIds.length !== editedAttributes.length) {
+      toast.error("Please ensure all attributes have valid values selected.");
+      return;
+    }
+
+    // Create payload in the same format as add variant
+    const payload = {
+      attribute_value_ids: attributeValueIds,
+      images: editImages,
+    };
+
+    try {
+      const res = await edit_variants(token, editingVariant.variant_id, payload);
+      if (res) {
+        fetchData(); // Refresh the list
+        handleCancelEdit();
+        toast.success("Variant updated successfully!");
+      }
+    } catch (error) {
+      console.error("Error updating variant:", error);
+    }
+  }, [editingVariant, editImages, editedAttributes, token, fetchData, handleCancelEdit, list, isEditedVariantDuplicate]);
+
   // Update attributes values when values change
   useEffect(() => {
     if (values.length === 0) return;
@@ -542,6 +766,17 @@ export const useCreateVariants = () => {
     handleDeleteWithConfirmation,
     handleDeletePending,
     isColorAttribute,
+    // Edit handlers
+    editingVariant,
+    editImages,
+    editedAttributes,
+    editAttributeValues,
+    handleEditVariant,
+    handleCancelEdit,
+    handleEditImageUpload,
+    handleRemoveEditImage,
+    handleChangeEditAttributeValue,
+    handleSubmitEdit,
   };
 };
 
