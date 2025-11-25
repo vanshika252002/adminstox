@@ -27,8 +27,8 @@ export const schema = Yup.object({
     ,
   images: Yup.array()
     .of(Yup.string())
-    .min(1, "Atleast one is required")
-    .required("At least one image is required"),
+    // .min(1, "Atleast one is required")
+    // .required("At least one image is required"),
 });
 
 export const useDebounce = (value, time) => {
@@ -79,7 +79,7 @@ export const handleImageUpload = async (
 };
 
 
-export const handleVariantImageUpload = async (e, identifier, hasColor, setColorImages, setVariantImages, colorImages, variantImages) => {
+export const handleVariantImageUpload = async (e, combinationKey, setCombinationImages, combinationImages) => {
   const files = e.target.files;
   if (!files || files.length === 0) return;
   
@@ -96,17 +96,10 @@ export const handleVariantImageUpload = async (e, identifier, hasColor, setColor
     
     console.log("response of the images api", res?.data?.data);
     
-    if (hasColor) {
-      setColorImages((prev) => ({
-        ...prev,
-        [identifier]: res?.data?.data || []
-      }));
-    } else {
-      setVariantImages((prev) => ({
-        ...prev,
-        [identifier]: res?.data?.data || []
-      }));
-    }
+    setCombinationImages((prev) => ({
+      ...prev,
+      [combinationKey]: res?.data?.data || []
+    }));
     
   } catch (error) {
     console.error("Upload error:", error);

@@ -9,7 +9,7 @@ import {
   edit_product,
   get_product_Detail,
   get_category,
-  get_brand_name,
+  get_brand_name
 } from "../../reduxData/user/userAction";
 import { useSelector } from "react-redux";
 import { FORMAT_SECONDS_NO_LEADING_ZEROS } from "@mui/x-date-pickers/internals/hooks/useField/useField.utils";
@@ -18,7 +18,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useDispatch } from "react-redux";
 
 const AddProducts = ({ type }) => {
-  const token = useSelector((state) => state.auth.accessToken);
+
+  const token = useSelector(state=>state.auth.accessToken)
   const navigate = useNavigate();
   const [uploading, setUploading] = useState(false);
   const categoriesId = useSelector((state) => state.user.categoriesList);
@@ -30,7 +31,7 @@ const AddProducts = ({ type }) => {
   const formik = useFormik({
     initialValues: initialValues(type, editData),
     validationSchema: schema,
-    enableReinitialize: true,
+    enableReinitialize:true,
     onSubmit: async (values, { resetForm }) => {
       console.log("values of formic", values);
       if (type == "edit") {

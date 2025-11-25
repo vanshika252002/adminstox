@@ -110,9 +110,9 @@ const Products = () => {
                     <Link className="ms-2 text-black"  to={`/add-variant/${i?.id}`}>
               <i class="bi bi-plus-circle "  data-bs-toggle="tooltip" data-bs-placement="bottom" title="Add variant"></i>
                     </Link>
-                    <Link className="ms-2 " to={`/variants/${i?.id}`}>
+                    {/* <Link className="ms-2 " to={`/variants/${i?.id}`}>
                  <i class="bi bi-list-ol fs-4"></i>
-                    </Link>
+                    </Link> */}
                     
                   </td>
                 </tr>

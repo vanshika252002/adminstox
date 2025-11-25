@@ -1109,16 +1109,17 @@ export const add_item = async (token, values) => {
     const headers = {
       headers: {
         "x-access-token": token,
+        "Content-Type": "application/json",
       },
     };
-    const urlPath = `item/add-master-product`;
-    const res = await apiClient.post(urlPath, values, headers);
+    const urlPath = `${REACT_APP_BASE_URL}item/add-master-product`;
+    const res = await axios.post(urlPath, values, headers);
     if (res.data && res.data.status) {
       show_success(res.data.message);
       return res;
     }
   } catch (error) {
-    toast.error(error.response?.data?.message || "Error adding item");
+    toast.error( error?.response?.message || error?.response?.data?.error || "Error adding item");
   }
 };
 
@@ -1840,7 +1841,7 @@ export const delete_attribute = async (token, id) => {
         "x-access-token": token,
       },
     };
-    const urlPath = `${REACT_APP_BASE_URL}item/delete-attribute-value/${id}`;
+    const urlPath = `${REACT_APP_BASE_URL}item/delete-attribute/${id}`;
     const res = await axios.delete(urlPath, headers);
     if (res?.data) {
       show_success(res?.data?.message || "Deleted Successfully");
@@ -1925,17 +1926,15 @@ export const delete_attribute_values = async (token, id) => {
         "x-access-token": token,
       },
     };
-
-    const urlPath = `${REACT_APP_BASE_URL}/item/delete-attribute-value/${id}`;
+    const urlPath = `${REACT_APP_BASE_URL}item/delete-attribute-value/${id}`;
     const res = await axios.delete(urlPath, headers);
     if (res?.data) {
       show_success(res?.data?.message || "Deleted Successfully");
+      return true;
     }
   } catch (error) {
     toast.error(
-      error?.response?.message ||
-        error?.response?.data?.error ||
-        "Failed to delete"
+      error?.response?.data?.error || error?.response?.message || "Failed"
     );
   }
 };
@@ -2014,7 +2013,7 @@ export const delete_variant = async(token,id)=>{
 
 
 
-export const edit_variants = async(token,id)=>{
+export const edit_variants = async(token, body)=>{
 
   try{
 const headers = {
@@ -2023,8 +2022,13 @@ headers:{
 }
 };
 
-const urlPath= `${REACT_APP_BASE_URL}item/edit-variant/${id}`;
-const res = await axios.put(urlPath,body,token);
+const urlPath= `${REACT_APP_BASE_URL}item/edit-variant`;
+const res = await axios.put(urlPath,body,headers);
+if(res?.data)
+{
+  show_success(res?.data?.message || "Updated Successfully ")
+  return true;
+}
   }catch(error){
 
   }

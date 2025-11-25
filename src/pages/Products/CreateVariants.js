@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { toast } from "react-toastify";
 import { useCreateVariants, STATUS_TABS } from "./useCreateVariants";
 import { handleDate } from "./utils";
@@ -48,8 +48,7 @@ const CreateVariants = () => {
     // State
     tableAttrib,
     pairs,
-    colorImages,
-    variantImages,
+    combinationImages,
     tableFields,
     filterTab,
     selectedAttributes,
@@ -59,6 +58,8 @@ const CreateVariants = () => {
     filteredVariants,
     variantStats,
     duplicateVariants,
+    setPendingVariants,
+    pendingVariants,
 
     // Handlers
     setFilterTab,
@@ -72,31 +73,45 @@ const CreateVariants = () => {
     handleDeleteWithConfirmation,
     handleDeletePending,
     isColorAttribute,
+    // Edit handlers
+    editingVariant,
+    editImages,
+    editedAttributes,
+    editAttributeValues,
+    handleEditVariant,
+    handleCancelEdit,
+    handleEditImageUpload,
+    handleRemoveEditImage,
+    handleChangeEditAttributeValue,
+    handleSubmitEdit,
   } = useCreateVariants();
 
   // Scroll to variant creation section
   const scrollToCreation = () => {
     document.getElementById("variant-creation")?.scrollIntoView({ behavior: "smooth" });
   };
+  useEffect(()=>{
+console.log("pending variants ===>   ",pendingVariants)
+  },[pendingVariants])
 
   return (
     <div className="create-product-variants mx-auto container">
       {/* Header */}
       <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2 className="mb-0">Single page variant management UI</h2>
+        <h2 className="mb-0">Variant management </h2>
         <div className="d-flex gap-2">
           <button className="btn btn-primary" onClick={scrollToCreation}>
             + Generate Combinations
           </button>
           <button className="btn btn-success" onClick={scrollToCreation}>
-            + Add Single Variant
+            + Add  Variant
           </button>
         </div>
       </div>
 
       {/* Variants Summary */}
       {allVariants.length > 0 && (
-        <div className="mb-4">
+        <div className="mb-4 mt-5">
           <h3 className="fw-600">All Variants ({allVariants.length})</h3>
           <div className="d-flex gap-3 mb-3">
             <div className="d-flex align-items-center gap-2">
@@ -153,13 +168,14 @@ const CreateVariants = () => {
               <table className="table user-management-table table-hover">
                 <thead className="border-gray">
                   <tr>
-                    <th scope="col">Status</th>
+                   
                     <th scope="col">Sr. No.</th>
                     {tableFields?.map((i) => (
                       <th key={i[0]}>{i[1].name}</th>
                     ))}
                     <th scope="col">Images</th>
                     <th scope="col">Created At</th>
+                     <th scope="col">Status</th>
                     <th scope="col">Actions</th>
                   </tr>
                 </thead>
@@ -174,17 +190,7 @@ const CreateVariants = () => {
                         className={isDuplicate ? "table-warning" : ""}
                         style={isDuplicate ? { backgroundColor: "#fff3cd" } : {}}
                       >
-                        <td>
-                          <StatusBadge status={variant?.status} />
-                          {isDuplicate && (
-                            <span
-                              className="badge bg-danger ms-2"
-                              title="This variant already exists"
-                            >
-                              Duplicate
-                            </span>
-                          )}
-                        </td>
+                       
                         <td>{idx + 1}</td>
                         {tableFields?.map((field) => {
                           const attrId = field[0];
@@ -201,28 +207,49 @@ const CreateVariants = () => {
                           <VariantImage images={variant?.images} />
                         </td>
                         <td>{handleDate(variant?.created_at)}</td>
+                         <td>
+                          <StatusBadge status={variant?.status} />
+                          {isDuplicate && (
+                            <span
+                              className="badge bg-danger ms-2"
+                              title="This variant already exists"
+                            >
+                              Duplicate
+                            </span>
+                          )}
+                        </td>
                         <td>
-                          <i
-                            className="far fa-edit edit me-2"
-                            style={{ cursor: "pointer" }}
-                            onClick={() => {
-                              toast.info("Edit functionality to be implemented");
-                            }}
-                          ></i>
                           {variant?.status === "pending" ? (
-                            <i
-                              onClick={() => handleDeletePending(variant?.temp_id)}
-                              className="bi bi-trash3 text-danger"
-                              style={{ cursor: "pointer" }}
-                            ></i>
+                            <>
+                              <i
+                                className="far fa-edit edit me-2 text-muted"
+                                style={{ cursor: "not-allowed", opacity: 0.5 }}
+                                title="Edit disabled for pending variants"
+                              ></i>
+                              <i
+                                className="bi bi-trash3 text-danger"
+                                style={{ cursor: "pointer" }}
+                                onClick={() => handleDeletePending(variant?.temp_id)}
+                                title="Delete pending variant"
+                              ></i>
+                            </>
                           ) : (
-                            <i
-                              onClick={() =>
-                                handleDeleteWithConfirmation(variant?.variant_id)
-                              }
-                              className="bi bi-trash3 text-danger"
-                              style={{ cursor: "pointer" }}
-                            ></i>
+                            <>
+                              <i
+                                className="far fa-edit edit me-2"
+                                style={{ cursor: "pointer" }}
+                                onClick={() => handleEditVariant(variant)}
+                                title="Edit variant"
+                              ></i>
+                              <i
+                                onClick={() =>
+                                  handleDeleteWithConfirmation(variant?.variant_id)
+                                }
+                                className="bi bi-trash3 text-danger"
+                                style={{ cursor: "pointer" }}
+                                title="Delete variant"
+                              ></i>
+                            </>
                           )}
                         </td>
                       </tr>
@@ -323,129 +350,46 @@ const CreateVariants = () => {
               <thead className="border-gray">
                 <tr>
                   <th>Sr No.</th>
-                  {pairs.length > 0 && pairs[0]?.colorId && <th>Color</th>}
                   <th>Images</th>
-                  {tableAttrib
-                    .filter((attr) => !isColorAttribute(attr))
-                    .map((attr, idx) => (
-                      <th key={idx}>{attr}</th>
-                    ))}
+                  {tableAttrib.map((attr, idx) => (
+                    <th key={idx}>{attr}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {pairs.map((pair, pairIdx) => {
-                  const hasColor = pair.colorId !== null && pair.colorId !== undefined;
-                  const valueCombos =
-                    pair.values && pair.values.length > 0 ? pair.values : [[]];
-
+                  const valueCombo = pair.values || [];
+                  
                   return (
-                    <React.Fragment key={pairIdx}>
-                      {valueCombos.length > 0 ? (
-                        valueCombos.map((valueCombo, comboIdx) => (
-                          <tr key={`${pairIdx}-${comboIdx}`}>
-                            {comboIdx === 0 && (
-                              <td rowSpan={valueCombos.length}>{pairIdx + 1}</td>
-                            )}
-                            {hasColor && comboIdx === 0 && (
-                              <td rowSpan={valueCombos.length} className="fw-bold">
-                                {pair.color}
-                              </td>
-                            )}
-                            {comboIdx === 0 && (
-                              <td rowSpan={valueCombos.length}>
-                                {pair.colorId ? (
-                                  <>
-                                    <input
-                                      type="file"
-                                      className="form-control form-control-sm"
-                                      accept="image/*"
-                                      multiple
-                                      onChange={(e) =>
-                                        handleImageUpload(e, pair.colorId, true)
-                                      }
-                                    />
-                                    {colorImages[pair.colorId] && (
-                                      <small className="text-muted d-block mt-1">
-                                        {colorImages[pair.colorId].length} file(s) selected
-                                      </small>
-                                    )}
-                                  </>
-                                ) : (
-                                  <>
-                                    <input
-                                      type="file"
-                                      className="form-control form-control-sm"
-                                      accept="image/*"
-                                      multiple
-                                      onChange={(e) =>
-                                        handleImageUpload(e, pair.variantKey, false)
-                                      }
-                                    />
-                                    {variantImages[pair.variantKey] && (
-                                      <small className="text-muted d-block mt-1">
-                                        {variantImages[pair.variantKey].length} file(s) selected
-                                      </small>
-                                    )}
-                                  </>
-                                )}
-                              </td>
-                            )}
-                            {valueCombo && valueCombo.length > 0 ? (
-                              valueCombo.map((val, valIdx) => (
-                                <td key={valIdx}>{val.name}</td>
-                              ))
-                            ) : (
-                              tableAttrib
-                                .filter((attr) => !isColorAttribute(attr))
-                                .map((attr, idx) => <td key={idx}>-</td>)
-                            )}
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td>{pairIdx + 1}</td>
-                          {hasColor && <td className="fw-bold">{pair.color}</td>}
-                          <td>
-                            {pair.colorId ? (
-                              <>
-                                <input
-                                  type="file"
-                                  className="form-control form-control-sm"
-                                  accept="image/*"
-                                  multiple
-                                  onChange={(e) => handleImageUpload(e, pair.colorId, true)}
-                                />
-                                {colorImages[pair.colorId] && (
-                                  <small className="text-muted d-block mt-1">
-                                    {colorImages[pair.colorId].length} file(s) selected
-                                  </small>
-                                )}
-                              </>
-                            ) : (
-                              <>
-                                <input
-                                  type="file"
-                                  className="form-control form-control-sm"
-                                  accept="image/*"
-                                  multiple
-                                  onChange={(e) => handleImageUpload(e, pair.variantKey, false)}
-                                />
-                                {variantImages[pair.variantKey] && (
-                                  <small className="text-muted d-block mt-1">
-                                    {variantImages[pair.variantKey].length} file(s) selected
-                                  </small>
-                                )}
-                              </>
-                            )}
+                    <tr key={pairIdx}>
+                      <td>{pairIdx + 1}</td>
+                      <td>
+                        <input
+                          type="file"
+                          className="form-control form-control-sm"
+                          accept="image/*"
+                          multiple
+                          onChange={(e) =>
+                            handleImageUpload(e, pair.combinationKey)
+                          }
+                        />
+                        {combinationImages[pair.combinationKey] && (
+                          <small className="text-muted d-block mt-1">
+                            {combinationImages[pair.combinationKey].length} file(s) selected
+                          </small>
+                        )}
+                      </td>
+                      {tableAttrib.map((attr, attrIdx) => {
+                        const value = valueCombo.find(
+                          (val) => val.attributeName === attr
+                        );
+                        return (
+                          <td key={attrIdx} className="text-capitalize">
+                            {value ? value.name : "-"}
                           </td>
-                          {tableAttrib
-                            .filter((attr) => !isColorAttribute(attr))
-                            .map((attr, idx) => (
-                              <td key={idx}>-</td>
-                            ))}
-                        </tr>
-                      )}
-                    </React.Fragment>
+                        );
+                      })}
+                    </tr>
                   );
                 })}
               </tbody>
@@ -460,6 +404,126 @@ const CreateVariants = () => {
           </button>
         )}
       </div>
+
+      {/* Edit Variant Modal */}
+      {editingVariant && (
+        <div
+          className="modal fade show"
+          style={{ display: "block", backgroundColor: "rgba(0,0,0,0.5)" }}
+          tabIndex="-1"
+        >
+          <div className="modal-dialog modal-lg">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Edit Variant</h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={handleCancelEdit}
+                ></button>
+              </div>
+              <div className="modal-body">
+                {/* Editable Variant Attributes */}
+                <div className="mb-4">
+                  <h6>Edit Variant Attributes:</h6>
+                  {editedAttributes.map((attr, idx) => (
+                    <div key={idx} className="mb-3">
+                      <label className="form-label fw-bold text-capitalize">
+                        {attr.attribute_name}
+                      </label>
+                      <select
+                        className="form-select"
+                        value={attr.value_id || ""}
+                        onChange={(e) => {
+                          const selectedOption = e.target.selectedOptions[0];
+                          const valueId = parseInt(e.target.value);
+                          const valueText = selectedOption.text;
+                          if (valueId) {
+                            handleChangeEditAttributeValue(attr.attribute_id, valueId, valueText);
+                          }
+                        }}
+                      >
+                        <option value="">Select {attr.attribute_name}...</option>
+                        {Array.isArray(editAttributeValues[attr.attribute_id]) &&
+                          editAttributeValues[attr.attribute_id].length > 0 ? (
+                          editAttributeValues[attr.attribute_id].map((val) => (
+                            <option key={val.id} value={val.id}>
+                              {val.value}
+                            </option>
+                          ))
+                        ) : (
+                          <option disabled>Loading values...</option>
+                        )}
+                      </select>
+                      {!attr.value_id && (
+                        <small className="text-danger">
+                          Please select a value for {attr.attribute_name}
+                        </small>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Images Section */}
+                <div className="mb-3">
+                  <label className="form-label">Variant Images</label>
+                  <input
+                    type="file"
+                    className="form-control mb-2"
+                    accept="image/*"
+                    multiple
+                    onChange={handleEditImageUpload}
+                  />
+                  
+                  {/* Display current images */}
+                  {editImages.length > 0 && (
+                    <div className="row g-2 mt-2">
+                      {editImages.map((image, idx) => (
+                        <div key={idx} className="col-md-3 position-relative">
+                          <img
+                            src={`${REACT_APP_IMAGE_URL}${image}`}
+                            alt={`Variant ${idx + 1}`}
+                            className="img-thumbnail"
+                            style={{ width: "100%", height: "150px", objectFit: "cover" }}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-danger position-absolute top-0 end-0 m-1"
+                            onClick={() => handleRemoveEditImage(idx)}
+                            style={{ zIndex: 10 }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {editImages.length === 0 && (
+                    <p className="text-muted">No images selected</p>
+                  )}
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={handleCancelEdit}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleSubmitEdit}
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

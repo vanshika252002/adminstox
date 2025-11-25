@@ -22,7 +22,7 @@ export const useGetAttributesValues = (id) => {
 
   const handleDeleteAttribute = async (id) => {
     try {
-      const res = await delete_attribute(token, id);
+      const res = await delete_attribute_values(token, id);
        console.log("first1")
       if (res) 
     {
