@@ -1,6 +1,6 @@
-import React, { useEffect } from "react";
+import React, { useEffect , useState} from "react";
 import { toast } from "react-toastify";
-import { useCreateVariants, STATUS_TABS } from "./useCreateVariants";
+import { useCreateVariants } from "./useCreateVariants";
 import { handleDate } from "./utils";
 
 const { REACT_APP_IMAGE_URL } = process.env;
@@ -10,8 +10,7 @@ const StatusBadge = ({ status }) => {
   const isSubmitted = (status?.toLowerCase() || "submitted") === "submitted";
   return (
     <span
-      className={`badge ${isSubmitted ? "bg-success" : "bg-warning"} d-flex align-items-center gap-1`}
-      style={{ width: "fit-content" }}
+      className={`badge ${isSubmitted ? "bg-success" : "bg-warning"} d-flex align-items-center gap-1 status-badge-fit`}
     >
       {isSubmitted ? (
         <>
@@ -33,24 +32,22 @@ const VariantImage = ({ images }) => {
   if (images && images[0]) {
     return (
       <img
-        className="container-fluid"
+        className="container-fluid variant-image-thumb"
         src={`${REACT_APP_IMAGE_URL}${images[0]}`}
         alt="Variant"
-        style={{ maxWidth: "100px", maxHeight: "100px", objectFit: "cover" }}
       />
     );
   }
-  return <span className="text-muted">No image</span>;
+  return <span className="text-muted variant-no-image">No image</span>;
 };
 
 const CreateVariants = () => {
   const {
     // State
+   list,
     tableAttrib,
     pairs,
-    combinationImages,
     tableFields,
-    filterTab,
     selectedAttributes,
     attributesValues,
     listAttributes,
@@ -62,7 +59,6 @@ const CreateVariants = () => {
     pendingVariants,
 
     // Handlers
-    setFilterTab,
     handleAddAttribute,
     handleSelectValue,
     handleRemoveValue,
@@ -72,7 +68,7 @@ const CreateVariants = () => {
     handleSubmitPending,
     handleDeleteWithConfirmation,
     handleDeletePending,
-    isColorAttribute,
+    handleDeleteCombination,
     // Edit handlers
     editingVariant,
     editImages,
@@ -87,96 +83,81 @@ const CreateVariants = () => {
   } = useCreateVariants();
 
   // Scroll to variant creation section
+const [ filter , setFilter] = useState("list") ;
+
   const scrollToCreation = () => {
     document.getElementById("variant-creation")?.scrollIntoView({ behavior: "smooth" });
   };
   useEffect(()=>{
-console.log("pending variants ===>   ",pendingVariants)
-  },[pendingVariants])
+console.log("list  ===>   ",list?.[0]?.attribute?.map(i=>i?.attribute_name))
+  },[list])
 
   return (
     <div className="create-product-variants mx-auto container">
       {/* Header */}
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2 className="mb-0">Variant management </h2>
-        <div className="d-flex gap-2">
-          <button className="btn btn-primary" onClick={scrollToCreation}>
-            + Generate Combinations
+      <div className="variant-header-section">
+        <h2 className="variant-page-title">Variant Management</h2>
+        <div className="variant-header-actions">
+          <button className="btn btn-primary variant-action-btn" onClick={()=>setFilter("list")}>
+            <i className="bi bi-plus-circle me-2"></i>
+           List
           </button>
-          <button className="btn btn-success" onClick={scrollToCreation}>
-            + Add  Variant
+          <button className="btn btn-success variant-action-btn" onClick={()=>setFilter("createVariant")}>
+            <i className="bi bi-plus-circle me-2"></i>
+           Variants
           </button>
         </div>
       </div>
 
       {/* Variants Summary */}
-      {allVariants.length > 0 && (
-        <div className="mb-4 mt-5">
-          <h3 className="fw-600">All Variants ({allVariants.length})</h3>
-          <div className="d-flex gap-3 mb-3">
-            <div className="d-flex align-items-center gap-2">
-              <i className="bi bi-check-circle-fill text-success"></i>
-              <span>{variantStats.submitted} Submitted</span>
-            </div>
-            <div className="d-flex align-items-center gap-2">
-              <i className="bi bi-clock-fill text-warning"></i>
-              <span>{variantStats.pending} Pending</span>
+      {allVariants.length > 0 && filter=="list" && (
+        <div className="variants-summary-section mb-2 mt-2">
+          <div className="d-flex justify-content-between align-items-center mb-2">
+            <h3 className="variants-summary-title mb-0 variants-summary-title-compact">All Variants ({allVariants.length})</h3>
+            <div className="d-flex gap-2 align-items-center">
+              {/* Submit Pending Button */}
+              {variantStats.pending > 0 && (
+                <button
+                  className="btn btn-success btn-sm"
+                  onClick={handleSubmitPending}
+                  disabled={duplicateVariants.size > 0}
+                  title={
+                    duplicateVariants.size > 0
+                      ? "Please remove duplicate variants before submitting"
+                      : ""
+                  }
+                >
+                  Submit Pending ({variantStats.pending})
+                </button>
+              )}
             </div>
           </div>
-
-          {/* Filter Tabs */}
-          <div className="d-flex gap-2 mb-3">
-            {Object.values(STATUS_TABS).map((tab) => (
-              <button
-                key={tab}
-                className={`btn ${filterTab === tab ? "btn-primary" : "btn-outline-primary"}`}
-                onClick={() => setFilterTab(tab)}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-
+          
+       
           {/* Duplicate Warning */}
           {duplicateVariants.size > 0 && (
-            <div className="alert alert-warning mb-3" role="alert">
+            <div className="alert alert-warning mb-2 py-2 variant-duplicate-warning" role="alert">
               <i className="bi bi-exclamation-triangle-fill me-2"></i>
               <strong>Warning:</strong> {duplicateVariants.size} pending variant(s) already exist
               in the submitted list. Please remove duplicates before submitting.
             </div>
           )}
 
-          {/* Submit Pending Button */}
-          {variantStats.pending > 0 && (
-            <button
-              className="btn btn-success mb-3"
-              onClick={handleSubmitPending}
-              disabled={duplicateVariants.size > 0}
-              title={
-                duplicateVariants.size > 0
-                  ? "Please remove duplicate variants before submitting"
-                  : ""
-              }
-            >
-              Submit Pending ({variantStats.pending})
-            </button>
-          )}
-
           {/* Variants Table */}
           {filteredVariants.length > 0 && (
-            <div className="table-responsive mb-5">
-              <table className="table user-management-table table-hover">
-                <thead className="border-gray">
+            <div className="table-responsive variants-table-container mb-2 variants-table-scroll">
+              <table className="table user-management-table table-hover table-sm">
+                <thead className="border-gray variants-table-header-sticky">
                   <tr>
-                   
-                    <th scope="col">Sr. No.</th>
-                    {tableFields?.map((i) => (
-                      <th key={i[0]}>{i[1].name}</th>
-                    ))}
-                    <th scope="col">Images</th>
-                    <th scope="col">Created At</th>
-                     <th scope="col">Status</th>
-                    <th scope="col">Actions</th>
+                    <th scope="col" className="variants-table-th">Sr. No.</th>
+                    {list?.[0]?.attribute?.map(i=>(<th className="variants-table-th">{i?.attribute_name}</th>))}
+                    {/* {tableFields?.map((i) => (
+                      <th key={i[0]} className="variants-table-th">{i[1].name}</th>
+                    ))} */}
+                    <th scope="col" className="variants-table-th">Images</th>
+                    <th scope="col" className="variants-table-th">Created At</th>
+                    <th scope="col" className="variants-table-th">Status</th>
+                    <th scope="col" className="variants-table-th">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -187,48 +168,45 @@ console.log("pending variants ===>   ",pendingVariants)
                     return (
                       <tr
                         key={variant?.variant_id || variant?.temp_id || idx}
-                        className={isDuplicate ? "table-warning" : ""}
-                        style={isDuplicate ? { backgroundColor: "#fff3cd" } : {}}
+                        className={isDuplicate ? "table-warning variant-duplicate-row" : ""}
                       >
-                       
-                        <td>{idx + 1}</td>
+                        <td className="variants-table-td">{idx + 1}</td>
+                        {list?.map(i=>i?.atrribute?.map(item=><td key={item?.attribute_id} className="text-capitalize variants-table-td variants-table-td-text">{item?.attribute_name}</td>))}
                         {tableFields?.map((field) => {
                           const attrId = field[0];
                           const foundAttr = variant?.attribute?.find(
                             (attr) => attr?.attribute_id === attrId
                           );
                           return (
-                            <td key={attrId} className="text-capitalize">
+                            <td key={attrId} className="text-capitalize variants-table-td variants-table-td-text">
                               {foundAttr?.value || "-"}
                             </td>
                           );
                         })}
-                        <td className="w-25">
+                        <td className="variants-table-td variants-table-td-image">
                           <VariantImage images={variant?.images} />
                         </td>
-                        <td>{handleDate(variant?.created_at)}</td>
-                         <td>
+                        <td className="variants-table-td variants-table-td-date">{handleDate(variant?.created_at)}</td>
+                        <td className="variants-table-td">
                           <StatusBadge status={variant?.status} />
                           {isDuplicate && (
                             <span
-                              className="badge bg-danger ms-2"
+                              className="badge bg-danger ms-2 variant-duplicate-badge"
                               title="This variant already exists"
                             >
                               Duplicate
                             </span>
                           )}
                         </td>
-                        <td>
+                        <td className="variants-table-td">
                           {variant?.status === "pending" ? (
                             <>
                               <i
-                                className="far fa-edit edit me-2 text-muted"
-                                style={{ cursor: "not-allowed", opacity: 0.5 }}
+                                className="far fa-edit edit me-2 text-muted variant-icon-disabled"
                                 title="Edit disabled for pending variants"
                               ></i>
                               <i
-                                className="bi bi-trash3 text-danger"
-                                style={{ cursor: "pointer" }}
+                                className="bi bi-trash3 text-danger variant-icon-clickable"
                                 onClick={() => handleDeletePending(variant?.temp_id)}
                                 title="Delete pending variant"
                               ></i>
@@ -236,8 +214,7 @@ console.log("pending variants ===>   ",pendingVariants)
                           ) : (
                             <>
                               <i
-                                className="far fa-edit edit me-2"
-                                style={{ cursor: "pointer" }}
+                                className="far fa-edit edit me-2 variant-icon-clickable"
                                 onClick={() => handleEditVariant(variant)}
                                 title="Edit variant"
                               ></i>
@@ -245,8 +222,7 @@ console.log("pending variants ===>   ",pendingVariants)
                                 onClick={() =>
                                   handleDeleteWithConfirmation(variant?.variant_id)
                                 }
-                                className="bi bi-trash3 text-danger"
-                                style={{ cursor: "pointer" }}
+                                className="bi bi-trash3 text-danger variant-icon-clickable"
                                 title="Delete variant"
                               ></i>
                             </>
@@ -263,153 +239,192 @@ console.log("pending variants ===>   ",pendingVariants)
       )}
 
       {/* Variant Creation Section */}
-      <div id="variant-creation">
-        <h2 className="mb-4">Create Product Variants</h2>
-
-        {/* SELECT ATTRIBUTE */}
-        <div className="mb-4">
-          <label className="select-attribute">Select Attribute</label>
-          <select
-            defaultValue=""
-            onChange={handleAddAttribute}
-            className="select-option-attribute"
-          >
-            <option value="" disabled>
-              Choose an attribute...
-            </option>
-            {listAttributes?.map((attr) => (
-              <option
-                key={attr.id}
-                value={JSON.stringify({ name: attr.name, id: attr.id })}
-                disabled={selectedAttributes.some((a) => a.id === attr.id)}
-              >
-                {attr.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* SELECTED ATTRIBUTES */}
-        {selectedAttributes.map((attribute) => (
-          <div key={attribute.id} className="selected-att">
-            <div className="d-flex justify-content-between align-items-center mb-2">
-              <h3 className="text-capitalize">{attribute.name}</h3>
-              <button
-                onClick={() => handleRemoveAttribute(attribute.id, attribute.name)}
-                className="remove-btns"
-              >
-                Remove
-              </button>
+     { filter=="createVariant" && <div id="variant-creation" className="variant-creation-wrapper">
+        <div className="variant-creation-container">
+          {/* Left Column - Combinations Table */}
+          <div className="variant-combinations-column">
+            <div className="combinations-sticky-wrapper">
+              <h3 className="combinations-title">Combinations ({pairs.length})</h3>
+              <div className="combinations-table-wrapper">
+                {pairs.length > 0 ? (
+                  <table className="table table-hover table-bordered combinations-table">
+                    <thead>
+                      <tr>
+                        <th>Status</th>
+                        <th>Sr No.</th>
+                        <th>Images</th>
+                        {}
+                        {tableAttrib.map((attr, idx) => (
+                          <th key={idx}>{attr}</th>
+                        ))}
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pairs.map((pair, pairIdx) => {
+                        const valueCombo = pair.values || [];
+                        
+                        return (
+                          <tr key={pairIdx}>
+                            <td>
+                              <StatusBadge status="pending" />
+                            </td>
+                            <td>{pairIdx + 1}</td>
+                            <td>
+                              <input
+                                type="file"
+                                key = {pair.combinationKey}
+                                className="form-control form-control-sm combination-file-input"
+                                accept="image/*"
+                                multiple
+                                onChange={(e) =>
+                                  handleImageUpload(e, pair.combinationKey)
+                                }
+                              />
+                              {pair.images && pair.images.length > 0 && (
+                                <small className="text-muted d-block mt-1 combination-file-count">
+                                  {pair.images.length} file(s)
+                                </small>
+                              )}
+                            </td>
+                            {tableAttrib.map((attr, attrIdx) => {
+                              const value = valueCombo.find(
+                                (val) => val.attributeName === attr
+                              );
+                              return (
+                                <td key={attrIdx} className="text-capitalize">
+                                  {value ? value.name : "-"}
+                                </td>
+                              );
+                            })}
+                            <td>
+                              <i
+                                className="bi bi-trash3 text-danger variant-icon-clickable"
+                                onClick={() => handleDeleteCombination(pairIdx)}
+                                title="Delete combination"
+                                style={{ cursor: "pointer" }}
+                              ></i>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div className="combinations-empty-state">
+                    <p className="text-muted text-center">No combinations generated yet. Select attributes and values to generate combinations.</p>
+                  </div>
+                )}
+              </div>
             </div>
+          </div>
 
-            <div className="d-flex gap-2 mb-1">
+          {/* Right Column - Form */}
+          <div className="variant-form-column">
+            <h2 className="variant-section-title">Create Product Variants</h2>
+
+            {/* SELECT ATTRIBUTE */}
+            <div className="mb-2">
+              <label className="select-attribute">Select Attribute</label>
               <select
-                onChange={(e) => handleSelectValue(attribute.id, e)}
-                className="select-option-attribute"
                 defaultValue=""
+                onChange={handleAddAttribute}
+                className="select-option-attribute"
               >
                 <option value="" disabled>
-                  Select {attribute.name} value...
+                  Choose an attribute...
                 </option>
-                {attributesValues
-                  ?.find((i) => i.id === attribute.id)
-                  ?.values?.map((val) => (
-                    <option key={val.id} value={val.id}>
-                      {val.value}
-                    </option>
-                  ))}
+                {listAttributes?.map((attr) => (
+                  <option
+                    key={attr.id}
+                    value={JSON.stringify({ name: attr.name, id: attr.id })}
+                    disabled={selectedAttributes.some((a) => a.id === attr.id)}
+                  >
+                    {attr.name}
+                  </option>
+                ))}
               </select>
             </div>
 
-            {attribute.selectedValues.length > 0 && (
-              <div>
-                <p className="fw-bold mb-2">Selected Values:</p>
-                <div className="atrr-mapping">
-                  {attribute.selectedValues.map((val) => (
-                    <span key={val.id} className="atrr-values">
-                      {val.value}
-                      <button
-                        onClick={() => handleRemoveValue(attribute.id, val.id)}
-                        className="remove-values"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
+            {/* SELECTED ATTRIBUTES */}
+            <div className="selected-attributes-container">
+              {selectedAttributes.map((attribute) => (
+                <div key={attribute.id} className="selected-att">
+                  <div className="d-flex justify-content-between align-items-center mb-1">
+                    <h3 className="text-capitalize">{attribute.name}</h3>
+                    <button
+                      onClick={() => handleRemoveAttribute(attribute.id, attribute.name)}
+                      className="remove-btns"
+                    >
+                      Remove
+                    </button>
+                  </div>
+
+                  <div className="d-flex gap-2 mb-1">
+                    <select
+                      onChange={(e) => handleSelectValue(attribute.id, e)}
+                      className="select-option-attribute"
+                      defaultValue=""
+                    >
+                      <option value="" disabled>
+                        Select {attribute.name} value...
+                      </option>
+                      {attributesValues
+                        ?.find((i) => i.id === attribute.id)
+                        ?.values?.map((val) => (
+                          <option key={val.id} value={val.id}>
+                            {val.value}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  {attribute.selectedValues.length > 0 && (
+                    <div>
+                      <p className="fw-bold mb-1 selected-values-label">Selected Values:</p>
+                      <div className="atrr-mapping">
+                        {attribute.selectedValues.map((val) => (
+                          <span key={val.id} className="atrr-values">
+                            {val.value}
+                            <button
+                              onClick={() => handleRemoveValue(attribute.id, val.id)}
+                              className="remove-values"
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
+              ))}
+            </div>
+
+            {/* Submit Button */}
+            {selectedAttributes.length > 0 && (
+              <button 
+                onClick={handleSubmit} 
+                className="submit-variants"
+                disabled={duplicateVariants.size > 0}
+                title={
+                  duplicateVariants.size > 0
+                    ? "Please remove duplicate variants before submitting"
+                    : ""
+                }
+              >
+                Submit Variants
+              </button>
             )}
           </div>
-        ))}
-
-        {/* Combinations Table */}
-        {pairs.length > 0 && (
-          <div className="table-responsive mb-4 mt-5">
-            <h3>Combinations</h3>
-            <table className="table table-hover table-bordered user-management-table auction-category-list">
-              <thead className="border-gray">
-                <tr>
-                  <th>Sr No.</th>
-                  <th>Images</th>
-                  {tableAttrib.map((attr, idx) => (
-                    <th key={idx}>{attr}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {pairs.map((pair, pairIdx) => {
-                  const valueCombo = pair.values || [];
-                  
-                  return (
-                    <tr key={pairIdx}>
-                      <td>{pairIdx + 1}</td>
-                      <td>
-                        <input
-                          type="file"
-                          className="form-control form-control-sm"
-                          accept="image/*"
-                          multiple
-                          onChange={(e) =>
-                            handleImageUpload(e, pair.combinationKey)
-                          }
-                        />
-                        {combinationImages[pair.combinationKey] && (
-                          <small className="text-muted d-block mt-1">
-                            {combinationImages[pair.combinationKey].length} file(s) selected
-                          </small>
-                        )}
-                      </td>
-                      {tableAttrib.map((attr, attrIdx) => {
-                        const value = valueCombo.find(
-                          (val) => val.attributeName === attr
-                        );
-                        return (
-                          <td key={attrIdx} className="text-capitalize">
-                            {value ? value.name : "-"}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Submit Button */}
-        {selectedAttributes.length > 0 && (
-          <button onClick={handleSubmit} className="submit-variants">
-            Submit Variants
-          </button>
-        )}
+        </div>
       </div>
+}
 
       {/* Edit Variant Modal */}
       {editingVariant && (
         <div
-          className="modal fade show"
-          style={{ display: "block", backgroundColor: "rgba(0,0,0,0.5)" }}
+          className="modal fade show variant-edit-modal"
           tabIndex="-1"
         >
           <div className="modal-dialog modal-lg">
@@ -472,6 +487,7 @@ console.log("pending variants ===>   ",pendingVariants)
                     className="form-control mb-2"
                     accept="image/*"
                     multiple
+                    
                     onChange={handleEditImageUpload}
                   />
                   
@@ -483,14 +499,12 @@ console.log("pending variants ===>   ",pendingVariants)
                           <img
                             src={`${REACT_APP_IMAGE_URL}${image}`}
                             alt={`Variant ${idx + 1}`}
-                            className="img-thumbnail"
-                            style={{ width: "100%", height: "150px", objectFit: "cover" }}
+                            className="img-thumbnail variant-edit-image"
                           />
                           <button
                             type="button"
-                            className="btn btn-sm btn-danger position-absolute top-0 end-0 m-1"
+                            className="btn btn-sm btn-danger position-absolute top-0 end-0 m-1 variant-edit-image-remove"
                             onClick={() => handleRemoveEditImage(idx)}
-                            style={{ zIndex: 10 }}
                           >
                             ×
                           </button>
