@@ -7,15 +7,29 @@ const { REACT_APP_IMAGE_URL } = process.env;
 
 // Helper component for status badge
 const StatusBadge = ({ status }) => {
-  const isSubmitted = (status?.toLowerCase() || "submitted") === "submitted";
+  const statusLower = (status?.toLowerCase() || "submitted");
+  const isSubmitted = statusLower === "submitted";
+  const isDuplicated = statusLower === "duplicated";
+  
   return (
     <span
-      className={`badge ${isSubmitted ? "bg-success" : "bg-warning"} d-flex align-items-center gap-1 status-badge-fit`}
+      className={`badge ${
+        isSubmitted 
+          ? "bg-success" 
+          : isDuplicated 
+          ? "bg-danger" 
+          : "bg-warning"
+      } d-flex align-items-center gap-1 status-badge-fit`}
     >
       {isSubmitted ? (
         <>
           <i className="bi bi-check-circle"></i>
           Submitted
+        </>
+      ) : isDuplicated ? (
+        <>
+          <i className="bi bi-exclamation-triangle"></i>
+          Duplicated
         </>
       ) : (
         <>
@@ -57,6 +71,8 @@ const CreateVariants = () => {
     duplicateVariants,
     setPendingVariants,
     pendingVariants,
+    pairsDuplicateInfo,
+    combinationImages,
 
     // Handlers
     handleAddAttribute,
@@ -263,11 +279,13 @@ console.log("list  ===>   ",list?.[0]?.attribute?.map(i=>i?.attribute_name))
                     <tbody>
                       {pairs.map((pair, pairIdx) => {
                         const valueCombo = pair.values || [];
+                        const duplicateInfo = pairsDuplicateInfo?.get(pair.combinationKey);
+                        const isDuplicate = !!duplicateInfo;
                         
                         return (
-                          <tr key={pairIdx}>
+                          <tr key={pairIdx} className={isDuplicate ? "table-danger" : ""}>
                             <td>
-                              <StatusBadge status="pending" />
+                              <StatusBadge status={isDuplicate ? "duplicated" : "pending"} />
                             </td>
                             <td>{pairIdx + 1}</td>
                             <td>
@@ -281,9 +299,9 @@ console.log("list  ===>   ",list?.[0]?.attribute?.map(i=>i?.attribute_name))
                                   handleImageUpload(e, pair.combinationKey)
                                 }
                               />
-                              {pair.images && pair.images.length > 0 && (
+                              {combinationImages?.[pair.combinationKey] && combinationImages[pair.combinationKey].length > 0 && (
                                 <small className="text-muted d-block mt-1 combination-file-count">
-                                  {pair.images.length} file(s)
+                                  {combinationImages[pair.combinationKey].length} file(s)
                                 </small>
                               )}
                             </td>
@@ -406,10 +424,15 @@ console.log("list  ===>   ",list?.[0]?.attribute?.map(i=>i?.attribute_name))
               <button 
                 onClick={handleSubmit} 
                 className="submit-variants"
-                disabled={duplicateVariants.size > 0}
+                disabled={
+                  duplicateVariants.size > 0 || 
+                  (pairsDuplicateInfo && pairsDuplicateInfo.size > 0)
+                }
                 title={
                   duplicateVariants.size > 0
                     ? "Please remove duplicate variants before submitting"
+                    : pairsDuplicateInfo && pairsDuplicateInfo.size > 0
+                    ? `Please delete ${pairsDuplicateInfo.size} duplicate variant(s) before submitting`
                     : ""
                 }
               >

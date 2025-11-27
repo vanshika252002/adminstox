@@ -24,6 +24,7 @@ export const useCreateVariants = () => {
   const [pairs, setPairs] = useState([]);
   const [combinationImages, setCombinationImages] = useState({});
   const [tableFields, setTableFields] = useState([]);
+  const [pairsDuplicateInfo, setPairsDuplicateInfo] = useState(new Map());
   const [filterTab, setFilterTab] = useState(STATUS_TABS.ALL);
   const [selectedId, setSelectedId] = useState("");
   const [selectedAttributes, setSelectedAttributes] = useState([]);
@@ -198,45 +199,101 @@ export const useCreateVariants = () => {
         // If this new combination key doesn't have images, try to find matching old key
         if (!newImages[pair.combinationKey]) {
           const newIds = pair.combinationKey.replace('combo_', '').split('_').map(Number).sort((a, b) => a - b);
+          const newIdsSet = new Set(newIds);
           
-          // Find old combinations where all their IDs exist in this new combination
-          // This handles the case when a new attribute value is added (new combo has more IDs)
+          // Find old combinations where ALL old IDs exist in the new combination
+          // This means the old combo is a subset of the new combo (e.g., combo_0 -> combo_0_7)
           const matchingOldKeys = Object.keys(prevImages).filter((oldKey) => {
             const oldIds = oldKey.replace('combo_', '').split('_').map(Number).sort((a, b) => a - b);
-            // Check if all IDs in the OLD combination exist in the NEW combination
-            // This means the old combo is a subset of the new combo
-            return oldIds.length > 0 && oldIds.every(id => newIds.includes(id));
+            // Check if ALL IDs in the OLD combination exist in the NEW combination
+            // This handles the case when a new attribute is added (old combo is subset of new combo)
+            return oldIds.length > 0 && oldIds.every(id => newIdsSet.has(id));
           });
           
-          // If multiple matches, prefer the one with the most IDs (most specific match)
-          const matchingOldKey = matchingOldKeys.length > 0 
-            ? matchingOldKeys.reduce((best, current) => {
-                const bestIds = best.replace('combo_', '').split('_').map(Number);
-                const currentIds = current.replace('combo_', '').split('_').map(Number);
-                return currentIds.length > bestIds.length ? current : best;
-              })
-            : null;
+          // If no exact subset match, try finding combinations with ANY overlap
+          let matchingOldKey = null;
+          if (matchingOldKeys.length > 0) {
+            // Prefer the one with the most IDs (most specific match)
+            matchingOldKey = matchingOldKeys.reduce((best, current) => {
+              const bestIds = best.replace('combo_', '').split('_').map(Number);
+              const currentIds = current.replace('combo_', '').split('_').map(Number);
+              return currentIds.length > bestIds.length ? current : best;
+            });
+          } else {
+            // Fallback: find combinations with ANY overlap
+            const overlappingKeys = Object.keys(prevImages).filter((oldKey) => {
+              const oldIds = oldKey.replace('combo_', '').split('_').map(Number);
+              return oldIds.some(id => newIdsSet.has(id));
+            });
+            
+            if (overlappingKeys.length > 0) {
+              // Prefer the one with the most overlapping IDs
+              matchingOldKey = overlappingKeys.reduce((best, current) => {
+                const bestIds = new Set(best.replace('combo_', '').split('_').map(Number));
+                const currentIds = new Set(current.replace('combo_', '').split('_').map(Number));
+                
+                const bestOverlap = Array.from(bestIds).filter(id => newIdsSet.has(id)).length;
+                const currentOverlap = Array.from(currentIds).filter(id => newIdsSet.has(id)).length;
+                
+                if (currentOverlap > bestOverlap) {
+                  return current;
+                } else if (currentOverlap === bestOverlap) {
+                  return currentIds.size > bestIds.size ? current : best;
+                }
+                return best;
+              });
+            }
+          }
           
           if (matchingOldKey && prevImages[matchingOldKey]) {
             // Preserve images from the matching old combination
-            newImages[pair.combinationKey] = prevImages[matchingOldKey];
+            newImages[pair.combinationKey] = [...prevImages[matchingOldKey]]; // Create a copy to avoid reference issues
             hasChanges = true;
-            console.log(`✅ Preserving images from ${matchingOldKey} to ${pair.combinationKey}`, prevImages[matchingOldKey]);
+            const oldIds = matchingOldKey.replace('combo_', '').split('_').map(Number);
+            const overlap = oldIds.filter(id => newIdsSet.has(id));
+            console.log(`✅ Preserving images from ${matchingOldKey} to ${pair.combinationKey} (overlap: ${overlap.join(',')})`, {
+              from: matchingOldKey,
+              to: pair.combinationKey,
+              images: prevImages[matchingOldKey],
+              oldIds: oldIds,
+              newIds: newIds
+            });
           } else {
-            console.log(`⚠️ No matching images found for ${pair.combinationKey}. New IDs:`, newIds, "Old keys:", Object.keys(prevImages));
+            console.log(`⚠️ No matching images found for ${pair.combinationKey}. New IDs:`, newIds, "Old keys:", Object.keys(prevImages), "Matching keys found:", matchingOldKeys.length);
           }
         } else {
           console.log(`✓ Images already exist for ${pair.combinationKey}:`, newImages[pair.combinationKey]);
         }
       });
 
-      // Clean up images for combination keys that no longer exist
+      // Clean up images for combination keys that no longer exist AND have no overlap with any new pairs
+      // Only remove images if ALL attribute IDs from that combination are gone
       const existingKeys = new Set(generatedPairs.map(p => p.combinationKey));
+      const allNewIds = new Set();
+      generatedPairs.forEach(pair => {
+        const ids = pair.combinationKey.replace('combo_', '').split('_').map(Number);
+        ids.forEach(id => allNewIds.add(id));
+      });
+      
+      // Clean up images for keys that no longer exist
+      // Only remove if ALL attribute IDs from that combination are gone (no overlap at all)
       Object.keys(newImages).forEach(key => {
         if (!existingKeys.has(key)) {
-          console.log(`🗑️ Removing images for old key: ${key}`);
-          delete newImages[key];
-          hasChanges = true;
+          // Check if any IDs from this old key still exist in new pairs
+          const oldIds = key.replace('combo_', '').split('_').map(Number);
+          const hasAnyOverlap = oldIds.some(id => allNewIds.has(id));
+          
+          if (!hasAnyOverlap) {
+            // Only remove if NONE of the attribute IDs exist in any new combination
+            console.log(`🗑️ Removing images for old key: ${key} (no overlapping IDs found)`);
+            delete newImages[key];
+            hasChanges = true;
+          } else {
+            // Keep the images even if the exact key doesn't exist
+            // They will be used when matching new combinations that contain these IDs
+            const overlappingIds = oldIds.filter(id => allNewIds.has(id));
+            console.log(`💾 Keeping images for old key: ${key} (has overlapping IDs: ${overlappingIds.join(',')}) - will be used for matching new combinations`);
+          }
         }
       });
 
@@ -253,24 +310,74 @@ export const useCreateVariants = () => {
 
     console.log("convertPairsToPendingVariants called with pairs:", pairs.length, "combinationImages:", Object.keys(combinationImages).length);
 
-    const submittedList = list || [];
+    // Check against ALL existing variants from API (both submitted and pending)
+    const allExistingVariants = list || [];
     const pendingList = [];
     const seenSignatures = new Set();
+    
+    // Store duplicate information for pairs
+    const duplicateInfoMap = new Map();
+
+    // Get all fixed attributes from the first variant in the list (if available)
+    // This ensures we include ALL attributes (even null ones) to match API variant structure
+    const fixedAttributes = list?.[0]?.attribute || [];
+    const fixedAttributeMap = new Map();
+    fixedAttributes.forEach((attr) => {
+      fixedAttributeMap.set(attr.attribute_id, {
+        attribute_id: attr.attribute_id,
+        attribute_name: attr.attribute_name,
+      });
+    });
 
     pairs.forEach((pair, pairIdx) => {
       const valueCombo = pair.values || [];
       const allAttributeIds = valueCombo.map((v) => v.id);
 
-      const attributes = valueCombo.map((val) => {
+      // Create a map of selected values by attribute_id
+      const selectedValuesMap = new Map();
+      valueCombo.forEach((val) => {
         const attr = selectedAttributes.find(
           (a) => a.name === val.attributeName
         );
-        return {
-          attribute_id: attr?.id || 0,
-          attribute_name: val.attributeName || "",
-          value: val.name,
-        };
+        if (attr) {
+          selectedValuesMap.set(attr.id, {
+            attribute_id: attr.id,
+            attribute_name: val.attributeName || "",
+            value: val.name,
+          });
+        }
       });
+
+      // Build attributes array with ALL fixed attributes
+      // If an attribute was selected, use its value; otherwise set null
+      const attributes = fixedAttributes.length > 0
+        ? fixedAttributes.map((fixedAttr) => {
+            const selectedValue = selectedValuesMap.get(fixedAttr.attribute_id);
+            if (selectedValue) {
+              return {
+                attribute_id: fixedAttr.attribute_id,
+                attribute_name: fixedAttr.attribute_name,
+                value: selectedValue.value,
+              };
+            } else {
+              return {
+                attribute_id: fixedAttr.attribute_id,
+                attribute_name: fixedAttr.attribute_name,
+                value: null,
+              };
+            }
+          })
+        : // Fallback: if no fixed attributes from API, use only selected ones
+          valueCombo.map((val) => {
+            const attr = selectedAttributes.find(
+              (a) => a.name === val.attributeName
+            );
+            return {
+              attribute_id: attr?.id || 0,
+              attribute_name: val.attributeName || "",
+              value: val.name,
+            };
+          });
 
       // Create a signature to check for duplicates within pending list
       const normalizeValue = (value) => {
@@ -300,25 +407,57 @@ export const useCreateVariants = () => {
       };
 
       const pendingSignature = createSignature(attributes);
+      console.log("🔍 Checking variant - Pending signature:", pendingSignature, "Attributes:", attributes);
 
-      // Check if this variant already exists in submitted list
-      const isDuplicateOfSubmitted = submittedList.some((submittedVariant) => {
-        if (!submittedVariant?.attribute || submittedVariant.attribute.length === 0) {
+      // Check if this variant already exists in ALL existing variants (submitted + pending from API)
+      const isDuplicateOfExisting = allExistingVariants.some((existingVariant) => {
+        if (!existingVariant?.attribute || existingVariant.attribute.length === 0) {
           return false;
         }
-        const submittedSignature = createSignature(submittedVariant.attribute);
-        const matches = pendingSignature === submittedSignature;
+        const existingSignature = createSignature(existingVariant.attribute);
+        const matches = pendingSignature === existingSignature;
         if (matches) {
-          console.log("🚫 Blocking duplicate at creation:", pendingSignature);
+          console.log("🚫 Blocking duplicate at creation:", {
+            pendingSignature,
+            existingSignature,
+            existingVariantId: existingVariant?.variant_id,
+            existingStatus: existingVariant?.status || "submitted",
+            pendingAttributes: attributes,
+            existingAttributes: existingVariant.attribute
+          });
+        } else {
+          console.log("✓ Not a duplicate:", {
+            pendingSignature,
+            existingSignature,
+            existingVariantId: existingVariant?.variant_id
+          });
         }
         return matches;
       });
 
       // Check if this variant already exists in pending list (within current batch)
       const isDuplicateInPending = seenSignatures.has(pendingSignature);
+      
+      // Store duplicate information for this pair
+      if (isDuplicateOfExisting || isDuplicateInPending) {
+        const duplicateVariant = isDuplicateOfExisting 
+          ? allExistingVariants.find((v) => {
+              if (!v?.attribute || v.attribute.length === 0) return false;
+              const existingSignature = createSignature(v.attribute);
+              return existingSignature === pendingSignature;
+            })
+          : null;
+        
+        duplicateInfoMap.set(pair.combinationKey, {
+          isDuplicate: true,
+          duplicateVariantId: duplicateVariant?.variant_id,
+          duplicateStatus: duplicateVariant?.status || "submitted",
+          reason: isDuplicateOfExisting ? "existing" : "pending"
+        });
+      }
 
       // Only add if not a duplicate
-      if (!isDuplicateOfSubmitted && !isDuplicateInPending) {
+      if (!isDuplicateOfExisting && !isDuplicateInPending) {
         seenSignatures.add(pendingSignature);
         pendingList.push({
           temp_id: `pending_${pendingList.length}`,
@@ -331,12 +470,23 @@ export const useCreateVariants = () => {
             images: combinationImages[pair.combinationKey] || [],
           },
         });
+        console.log("✅ Added pending variant:", pendingSignature);
       } else {
-        console.log("Skipping duplicate variant:", pendingSignature, isDuplicateOfSubmitted ? "(in submitted)" : "(in pending)");
+        console.log("❌ Skipping duplicate variant:", {
+          signature: pendingSignature,
+          reason: isDuplicateOfExisting ? "(in existing variants)" : "(in pending batch)",
+          attributes: attributes
+        });
       }
     });
 
+    // Store duplicate information separately to avoid infinite loops
+    setPairsDuplicateInfo(duplicateInfoMap);
+
     console.log("Setting pending variants:", pendingList.length, "out of", pairs.length, "pairs");
+    if (pendingList.length === 0 && pairs.length > 0) {
+      console.warn("⚠️ All variants were filtered out as duplicates! This means all combinations already exist in the database.");
+    }
     setPendingVariants(pendingList);
   }, [pairs, combinationImages, selectedAttributes, list]);
 
@@ -437,45 +587,122 @@ export const useCreateVariants = () => {
 
   const handleSubmit = useCallback(() => {
     console.log("handleSubmit called with pendingVariants:", pendingVariants.length);
+    console.log("pairs count:", pairs.length);
+    console.log("pendingVariants:", pendingVariants);
+    console.log("pairsDuplicateInfo:", pairsDuplicateInfo);
     
-    if (pendingVariants.length === 0) {
-      toast.warning("No variants to submit");
-      return;
-    }
-
-    const submittedList = list || [];
-    console.log("Checking against submitted list:", submittedList.length, "variants");
-    
-    const duplicates = [];
-    const uniqueVariants = [];
-    const seenSignatures = new Set();
-
-    // Check for duplicates against submitted list AND within pending list
+    // Real-time check: Check if there are any duplicate variants in the current pairs
+    // This ensures we catch duplicates even if pairsDuplicateInfo is stale
+    const allExistingVariants = list || [];
     const normalizeValue = (value) => {
-      // Handle null, undefined, empty string, and "-" as the same
       if (value === null || value === undefined || value === "" || value === "-") {
         return "-";
       }
-      // Convert to string, lowercase, and trim
       const normalized = String(value).toLowerCase().trim();
-      // Also handle string representations of null/undefined
       return normalized === "null" || normalized === "undefined" ? "-" : normalized;
     };
 
-    const createSignature = (attributes) => {
-      if (!attributes || attributes.length === 0) {
+    const createSignature = (attrs) => {
+      if (!attrs || attrs.length === 0) {
         return "";
       }
-      return attributes
+      return attrs
         .map((attr) => {
           const attrId = attr.attribute_id || 0;
-          // Handle both value and attribute_value_id (in case value is null but we have the ID)
           const attrValue = normalizeValue(attr.value !== null && attr.value !== undefined ? attr.value : "-");
           return `${attrId}:${attrValue}`;
         })
         .sort()
         .join("|");
     };
+
+    // Check all current pairs for duplicates
+    const fixedAttributes = list?.[0]?.attribute || [];
+    let foundDuplicates = [];
+    
+    if (pairs.length > 0 && fixedAttributes.length > 0) {
+      pairs.forEach((pair) => {
+        const valueCombo = pair.values || [];
+        const selectedValuesMap = new Map();
+        valueCombo.forEach((val) => {
+          const attr = selectedAttributes.find((a) => a.name === val.attributeName);
+          if (attr) {
+            selectedValuesMap.set(attr.id, {
+              attribute_id: attr.id,
+              attribute_name: val.attributeName || "",
+              value: val.name,
+            });
+          }
+        });
+
+        const attributes = fixedAttributes.map((fixedAttr) => {
+          const selectedValue = selectedValuesMap.get(fixedAttr.attribute_id);
+          if (selectedValue) {
+            return {
+              attribute_id: fixedAttr.attribute_id,
+              attribute_name: fixedAttr.attribute_name,
+              value: selectedValue.value,
+            };
+          } else {
+            return {
+              attribute_id: fixedAttr.attribute_id,
+              attribute_name: fixedAttr.attribute_name,
+              value: null,
+            };
+          }
+        });
+
+        const pendingSignature = createSignature(attributes);
+        
+        // Check if this pair is a duplicate
+        const isDuplicate = allExistingVariants.some((existingVariant) => {
+          if (!existingVariant?.attribute || existingVariant.attribute.length === 0) {
+            return false;
+          }
+          const existingSignature = createSignature(existingVariant.attribute);
+          return pendingSignature === existingSignature;
+        });
+
+        if (isDuplicate) {
+          foundDuplicates.push({
+            combinationKey: pair.combinationKey,
+            signature: pendingSignature
+          });
+        }
+      });
+    }
+
+    // Block submission if ANY duplicates are found
+    if (foundDuplicates.length > 0) {
+      console.error("🚫 Submission blocked: Found", foundDuplicates.length, "duplicate variant(s) in combinations table");
+      toast.error(`${foundDuplicates.length} duplicate variant(s) found in combinations table. Please delete duplicate variants before submitting.`);
+      return;
+    }
+    
+    // Also check pairsDuplicateInfo as a backup
+    const hasDuplicatesInInfo = pairsDuplicateInfo && pairsDuplicateInfo.size > 0;
+    if (hasDuplicatesInInfo) {
+      const duplicateCount = pairsDuplicateInfo.size;
+      console.error("🚫 Submission blocked: Found", duplicateCount, "duplicate variant(s) in pairsDuplicateInfo");
+      toast.error(`${duplicateCount} duplicate variant(s) found. Please delete duplicate variants before submitting.`);
+      return;
+    }
+    
+    if (pendingVariants.length === 0) {
+      if (pairs.length > 0) {
+        toast.warning(` ${pairs.length} variant(s) were filtered out as duplicates of existing variants.`);
+      } else {
+        toast.warning("No variants to submit. Please create variant combinations first.");
+      }
+      return;
+    }
+
+    // Check against ALL existing variants from API (both submitted and pending)
+    console.log("Checking against existing variants:", allExistingVariants.length, "variants");
+    
+    const duplicates = [];
+    const uniqueVariants = [];
+    const seenSignatures = new Set();
 
     pendingVariants.forEach((pendingVariant) => {
       const signature = createSignature(pendingVariant.attribute || []);
@@ -485,19 +712,19 @@ export const useCreateVariants = () => {
         return;
       }
 
-      // Check if duplicate in submitted list
-      const isDuplicateOfSubmitted = isVariantDuplicate(pendingVariant, submittedList);
+      // Check if duplicate in existing variants (submitted + pending from API)
+      const isDuplicateOfExisting = isVariantDuplicate(pendingVariant, allExistingVariants);
       
-      // Check if duplicate in pending list (already seen)
+      // Check if duplicate in pending list (already seen in current batch)
       const isDuplicateInPending = seenSignatures.has(signature);
 
-      if (isDuplicateOfSubmitted || isDuplicateInPending) {
+      if (isDuplicateOfExisting || isDuplicateInPending) {
         duplicates.push({
           variant: pendingVariant,
-          type: isDuplicateOfSubmitted ? "submitted" : "pending",
+          type: isDuplicateOfExisting ? "existing" : "pending",
           signature: signature
         });
-        console.log("Found duplicate:", signature, isDuplicateOfSubmitted ? "(in submitted)" : "(in pending)");
+        console.log("Found duplicate:", signature, isDuplicateOfExisting ? "(in existing variants)" : "(in pending batch)");
       } else {
         seenSignatures.add(signature);
         uniqueVariants.push(pendingVariant);
@@ -520,9 +747,9 @@ export const useCreateVariants = () => {
         })
         .join("; ");
 
-      const duplicateType = duplicates.some(d => d.type === "submitted")
-        ? "already exist in submitted list" 
-        : "are duplicates within pending list";
+      const duplicateType = duplicates.some(d => d.type === "existing")
+        ? "already exist in submitted or pending list" 
+        : "are duplicates within pending batch";
 
       toast.error(
         `${duplicates.length} variant(s) ${duplicateType} and cannot be submitted. Please remove duplicates before submitting.`
@@ -540,7 +767,7 @@ export const useCreateVariants = () => {
     console.log("Submitting", uniqueVariants.length, "unique variants");
     const payload = uniqueVariants.map((variant) => variant._payload);
     generateVariants(payload);
-  }, [pendingVariants, list, isVariantDuplicate, generateVariants]);
+  }, [pendingVariants, list, isVariantDuplicate, generateVariants, pairsDuplicateInfo, pairs, selectedAttributes]);
 
   const handleSubmitPending = useCallback(() => {
     handleSubmit();
@@ -645,6 +872,13 @@ export const useCreateVariants = () => {
           const newImages = { ...prevImages };
           delete newImages[pairToDelete.combinationKey];
           return newImages;
+        });
+        
+        // Remove duplicate info when combination is deleted
+        setPairsDuplicateInfo((prevInfo) => {
+          const newInfo = new Map(prevInfo);
+          newInfo.delete(pairToDelete.combinationKey);
+          return newInfo;
         });
       }
 
@@ -906,10 +1140,10 @@ export const useCreateVariants = () => {
       return;
     }
     console.log("first 4");
-    if (attributeValueIds.length !== editedAttributes.length) {
-      toast.error("Please ensure all attributes have valid values selected.");
-      return;
-    }
+    // if (attributeValueIds.length !== editedAttributes.length) {
+    //   toast.error("Please ensure all attributes have valid values selected.");
+    //   return;
+    // }
     console.log("first 5");
 
     const payload = {
@@ -1014,9 +1248,12 @@ export const useCreateVariants = () => {
     if (!list || list.length === 0 || pendingVariants.length === 0)
       return new Set();
 
+    // Check against ALL existing variants from API (both submitted and pending)
+    const allExistingVariants = list || [];
+
     const duplicates = new Set();
     pendingVariants.forEach((pendingVariant) => {
-      if (isVariantDuplicate(pendingVariant, list)) {
+      if (isVariantDuplicate(pendingVariant, allExistingVariants)) {
         duplicates.add(pendingVariant.temp_id);
       }
     });
@@ -1041,6 +1278,8 @@ export const useCreateVariants = () => {
     variantStats,
     duplicateVariants,
     setPendingVariants,
+    pairsDuplicateInfo,
+    combinationImages,
 
     setFilterTab,
     handleAddAttribute,
